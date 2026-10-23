@@ -1,18 +1,14 @@
 name: Itens e aditivos (portal KBF)
 
+# DESLIGADA: o portal da transparência (Cloudflare) bloqueia acessos vindos dos servidores do GitHub.
+# Fica disponível apenas para execução manual, caso o acesso seja liberado pela KBF.
 on:
-  schedule:
-    # 02h30 (horário de Brasília = UTC-3), quando o portal tem pouco acesso
-    - cron: "30 5 * * *"
   workflow_dispatch:
     inputs:
       completo:
         description: "Reler a lista completa de contratos (desde 2021)"
         type: boolean
         default: false
-  push:
-    branches: [main]
-    paths: ["scripts/kbf_itens.py", ".github/workflows/itens-kbf.yml"]
 
 permissions:
   contents: write

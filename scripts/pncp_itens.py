@@ -93,7 +93,11 @@ def ler_compra(ctrl):
             return c
     cnpj, ano, seq = partes_compra(ctrl)
     base = f"{API}/{cnpj}/compras/{ano}/{seq}"
-    info = get(base) or {}
+    try:  # dados gerais vêm da API de consulta (o endereço equivalente da API principal responde 301)
+        info = get(f"https://pncp.gov.br/api/consulta/v1/orgaos/{cnpj}/compras/{ano}/{seq}") or {}
+    except Exception as e:
+        log(f"  aviso: dados gerais da contratação {ctrl} indisponíveis ({e})")
+        info = {}
     itens, pagina = [], 1
     while True:
         lote = get(f"{base}/itens?pagina={pagina}&tamanhoPagina=100") or []

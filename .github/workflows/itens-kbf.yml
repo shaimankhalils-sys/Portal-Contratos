@@ -1,0 +1,59 @@
+name: Itens e aditivos (portal KBF)
+
+on:
+  schedule:
+    # 02h30 (horário de Brasília = UTC-3), quando o portal tem pouco acesso
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+    inputs:
+      completo:
+        description: "Reler a lista completa de contratos (desde 2021)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["scripts/kbf_itens.py", ".github/workflows/itens-kbf.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: itens-kbf
+  cancel-in-progress: false
+
+jobs:
+  itens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar navegador automático
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+
+      - name: Ler itens e aditivos no portal da transparência
+        continue-on-error: true
+        timeout-minutes: 100
+        env:
+          KBF_COMPLETO: ${{ inputs.completo && '1' || '0' }}
+        run: python -u scripts/kbf_itens.py data/contratos.json data/itens.json
+
+      - name: Publicar se houve mudança
+        if: always()
+        run: |
+          git config user.name "contratos-tx-bot"
+          git config user.email "contratos-tx-bot@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then echo "Nada mudou."; exit 0; fi
+          git commit -m "Atualiza itens e aditivos $(date -u +'%Y-%m-%d %H:%M') UTC"
+          for i in 1 2 3; do
+            git pull --rebase -X theirs origin main && git push && exit 0
+            echo "Tentativa $i falhou, aguardando..."; sleep $((i * 10))
+          done
+          exit 1

@@ -1,0 +1,51 @@
+name: Atualizar dados
+
+on:
+  schedule:
+    # 06h, 12h e 18h (horário de Brasília = UTC-3)
+    - cron: "0 9,15,21 * * *"
+  workflow_dispatch: {}   # botão "Run workflow" para atualizar na hora
+
+permissions:
+  contents: write
+
+concurrency:
+  group: atualizar-dados
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install openpyxl==3.1.5
+
+      - name: Baixar planilha do Google Drive
+        env:
+          PLANILHA_ID: ${{ vars.PLANILHA_ID }}
+        run: |
+          curl -sSL --fail "https://drive.google.com/uc?export=download&id=${PLANILHA_ID}" -o planilha.xlsx
+          python -c "import zipfile,sys; zipfile.ZipFile('planilha.xlsx')" \
+            || { echo "O arquivo baixado não é um Excel. Confira se a planilha está compartilhada como 'qualquer pessoa com o link'."; exit 1; }
+
+      - name: Gerar dados dos contratos
+        run: python scripts/build_data.py planilha.xlsx data/contratos.json
+
+      - name: Conferir com o PNCP
+        continue-on-error: true   # se o PNCP estiver fora do ar, mantém a última conferência
+        run: python scripts/pncp_sync.py data/contratos.json data/pncp.json
+
+      - name: Publicar se houve mudança
+        run: |
+          rm -f planilha.xlsx
+          git config user.name "contratos-tx-bot"
+          git config user.email "contratos-tx-bot@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || git commit -m "Atualiza dados $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git push

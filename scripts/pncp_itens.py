@@ -152,6 +152,24 @@ def tipo_termo(t):
     return "outro"
 
 
+def normaliza_termo(a):
+    """Valor efetivo do termo.
+    Na Prefeitura, o acréscimo é lançado no 'valor global' do termo (o 'valor acrescido' fica zerado).
+    Reajuste/reequilíbrio sem nenhum valor lançado ficam como None (valor não informado no PNCP)."""
+    bruto = a.get("vbruto", a.get("v")) or 0
+    vg = a.get("vg") or 0
+    a["vbruto"] = bruto
+    if bruto:
+        a["v"] = bruto
+    elif vg and a["tipo"] in ("acrescimo", "supressao"):
+        a["v"] = -abs(vg) if a["tipo"] == "supressao" else vg
+    elif a["tipo"] in ("reajuste", "reequilibrio", "repactuacao"):
+        a["v"] = None
+    else:
+        a["v"] = 0
+    return a
+
+
 def ler_termos(cnpj, ano, seq):
     termos = get(f"{API}/{cnpj}/contratos/{ano}/{seq}/termos") or []
     out = []
@@ -171,7 +189,7 @@ def ler_termos(cnpj, ano, seq):
             "sit": "",
             "fonte": "PNCP",
         })
-    return sorted(out, key=lambda a: a["cel"] or "")
+    return sorted([normaliza_termo(a) for a in out], key=lambda a: a["cel"] or "")
 
 
 def main(src_contratos, src_pncp, dest):
@@ -235,6 +253,10 @@ def main(src_contratos, src_pncp, dest):
             break
         if i % 25 == 0:
             log(f"  {i}/{len(fila)} contratos")
+
+    # aplica a regra de valores também aos termos já guardados
+    for c in contratos.values():
+        c["aditivos"] = [normaliza_termo(a) for a in c.get("aditivos", [])]
 
     # remove contratos que deixaram de ser vigentes
     vig = {r["n"] for r in base["vigentes"]}

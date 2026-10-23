@@ -616,9 +616,12 @@ function historico(r) {
   return ads.map(a => {
     const tipo = a.tipo || tipoAditivo(a);
     // no PNCP o "valor acrescido" já vem com sinal (negativo = supressão)
-    const delta = a.fonte === "PNCP" ? (a.v || 0) : (a.v || 0) * (tipo === "supressao" ? -1 : 1);
+    const semValor = a.fonte === "PNCP" && a.v == null;  // reajuste/reequilíbrio sem valor lançado no PNCP
+    // acréscimo lançado no "valor global": se for quase o valor do contrato, foi lançado como o NOVO TOTAL
+    const comoTotal = a.fonte === "PNCP" && !a.vbruto && a.vg > 0 && tipo === "acrescimo" && atual > 0 && a.vg >= 0.9 * atual;
+    const delta = semValor ? 0 : comoTotal ? a.vg - atual : a.fonte === "PNCP" ? (a.v || 0) : (a.v || 0) * (tipo === "supressao" ? -1 : 1);
     const ant = atual; atual = Math.round((atual + delta) * 100) / 100;
-    return {...a, tipo, ant, novo: atual, dif: delta, pct: ant ? delta / ant * 100 : null};
+    return {...a, tipo, semValor, comoTotal, ant, novo: atual, dif: delta, pct: ant ? delta / ant * 100 : null};
   });
 }
 let _adtCache = null;
@@ -642,8 +645,9 @@ function renderAdt() {
   const soma = t => all.filter(a => a.tipo === t).reduce((s, a) => s + a.dif, 0);
   const n = t => all.filter(a => a.tipo === t).length;
   const lidos = Object.keys(ITX.contratos || {}).length;
+  const semV = t => all.filter(a => a.tipo === t && a.semValor).length;
   const kp = (t, color) => `<button class="kpi${f.tipo === t ? " on" : ""}" data-tipo="${t}" style="--k:${color}">
-      <div class="lb">${TIPO_LBL[t]}</div><div class="vl num">${n(t)}</div><div class="sb num">${difFmt(soma(t))}</div></button>`;
+      <div class="lb">${TIPO_LBL[t]}</div><div class="vl num">${n(t)}</div><div class="sb num">${semV(t) && semV(t) === n(t) ? "valores não lançados no PNCP" : difFmt(soma(t)) + (semV(t) ? ` · ${semV(t)} sem valor` : "")}</div></button>`;
   $("#app").innerHTML = !ITX.atualizado_em
     ? `<section class="panel"><div class="note">Os termos aditivos são lidos do PNCP pela rotina automática. Assim que a primeira leitura terminar, eles aparecem aqui com o valor anterior, o valor novo e a diferença de cada termo.</div></section>`
     : `<section class="kpis">${kp("reajuste","var(--blue)")}${kp("reequilibrio","var(--amber)")}${kp("repactuacao","var(--yellow)")}${kp("acrescimo","var(--green)")}${kp("supressao","var(--red)")}${kp("prazo","var(--ink-3)")}</section>
@@ -662,8 +666,8 @@ function renderAdt() {
       <td class="num">${fmtD(a.cel || a.ini)}</td>
       <td class="cr"><div class="t1"><span class="num">${esc(a.r.n)}</span> · ${esc(a.n)}</div><div class="t2 clip">${esc(a.r.cr)} — ${esc(a.obj)}</div></td>
       <td>${tipoBadge(a.tipo)}</td>
-      <td class="r num">${brl(a.ant)}</td><td class="r num">${brl(a.novo)}</td>
-      <td class="r num"><b>${a.dif ? difFmt(a.dif) : "—"}</b><div class="t2">${a.dif ? pctFmt(a.pct) : ""}</div></td></tr>`).join("") ||
+      ${a.semValor ? `<td class="r muted" colspan="3">valor não informado no PNCP</td>` : `<td class="r num">${brl(a.ant)}</td><td class="r num">${brl(a.novo)}</td>
+      <td class="r num"><b>${a.dif ? difFmt(a.dif) : "—"}</b><div class="t2">${a.dif ? pctFmt(a.pct) : ""}</div></td>`}</tr>`).join("") ||
       `<tr><td colspan="6" class="empty">Nenhum termo aditivo com esses filtros.</td></tr>`}</tbody></table></div>
       ${rows.length > 300 ? `<div class="pager">Mostrando 300 de ${rows.length}. Use os filtros para refinar.</div>` : ""}</section>`;
   if (!ITX.atualizado_em) return;
@@ -728,7 +732,7 @@ async function carregarItens(r) {
   ITENS_CACHE[n] = itens;
   const total = itens.reduce((s, x) => s + (x.total || 0), 0);
   const LIM = 12, muitos = itens.length > LIM;
-  const linha = (x, i) => `<tr${muitos && i >= LIM ? ' class="mais" hidden' : ""}><td class="num muted">${i + 1}</td><td>${esc(x.prod)}${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
+  const linha = (x, i) => `<tr${muitos && i >= LIM ? ' class="mais" hidden' : ""}><td class="num muted">${i + 1}</td><td><div class="clip" title="${esc(x.prod)}">${esc(x.prod)}</div>${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
     <td class="muted">${esc(x.un || "")}</td><td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
   const srp = r.kbf && r.kbf.srp;
   box.innerHTML = `${r.kbf && r.kbf.fonte === "PNCP" ? `<div class="muted" style="margin-bottom:8px">Itens vencidos por este fornecedor na contratação de origem${r.kbf.compra_num ? ` (nº ${esc(r.kbf.compra_num)})` : ""}, segundo o PNCP.${srp ? " <b>Registro de preços:</b> a quantidade é a homologada na ata e pode ser maior que a deste contrato." : ""}</div>` : ""}
@@ -785,9 +789,9 @@ function openFicha(n) {
           : `<div class="money num">${brl(r.v)}</div>`}${tl}</div>
       ${r.hist.length ? `<div class="sec"><h4>Aditivos · valor anterior, novo e diferença</h4><div class="tbl-wrap"><table class="mini">
         <thead><tr><th>Termo</th><th>Tipo</th><th>Data</th><th class="r">Anterior</th><th class="r">Novo</th><th class="r">Diferença</th></tr></thead>
-        <tbody>${r.hist.map(h => `<tr><td><b class="num">${esc(h.n)}</b><div class="t2 clip">${esc(h.obj)}</div></td><td>${tipoBadge(h.tipo)}</td>
+        <tbody>${r.hist.map(h => `<tr><td><b class="num">${esc(h.n)}</b>${h.comoTotal ? ' <span class="muted" title="No PNCP este termo foi lançado com o valor total do contrato; a diferença foi calculada.">(lançado como total)</span>' : ""}<div class="t2 clip">${esc(h.obj)}</div></td><td>${tipoBadge(h.tipo)}</td>
           <td class="num">${fmtD(h.cel || h.ini)}${h.fim ? `<div class="t2">até ${fmtD(h.fim)}</div>` : ""}</td>
-          <td class="r num">${brl(h.ant)}</td><td class="r num">${brl(h.novo)}</td><td class="r num"><b>${h.dif ? difFmt(h.dif) : "—"}</b><div class="t2">${h.dif ? pctFmt(h.pct) : ""}</div></td></tr>`).join("")}</tbody></table></div>
+          ${h.semValor ? `<td class="r muted" colspan="3">valor não informado no PNCP</td>` : `<td class="r num">${brl(h.ant)}</td><td class="r num">${brl(h.novo)}</td><td class="r num"><b>${h.dif ? difFmt(h.dif) : "—"}</b><div class="t2">${h.dif ? pctFmt(h.pct) : ""}</div></td>`}</tr>`).join("")}</tbody></table></div>
         <div class="muted" style="margin-top:6px">Fonte: ${r.kbf.fonte === "PNCP" ? `PNCP (termos do contrato), lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. O tipo de cada termo segue a qualificação informada no PNCP.` : `Portal da Transparência, lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. Termos cancelados não entram na conta.`}</div></div>` : ""}
       <div class="sec"><h4>Itens do contrato</h4><div id="itensBox">${
         !r.kbf ? `<span class="muted">${!ITX.atualizado_em ? "Os itens são lidos do PNCP pela rotina automática e aparecem aqui após a primeira leitura."

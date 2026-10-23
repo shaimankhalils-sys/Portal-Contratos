@@ -5,6 +5,9 @@ on:
     # 06h, 12h e 18h (horário de Brasília = UTC-3)
     - cron: "0 9,15,21 * * *"
   workflow_dispatch: {}   # botão "Run workflow" para atualizar na hora
+  push:                   # roda também quando os scripts ou a rotina são alterados
+    branches: [main]
+    paths: ["scripts/**", ".github/workflows/**"]
 
 permissions:
   contents: write

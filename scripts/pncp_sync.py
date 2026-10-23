@@ -70,19 +70,19 @@ def baixar_pncp():
     return todos
 
 
-def chave_numero(txt):
-    """Extrai (sequencial, ano) de formatos como '2-1023-2025', '1023/2025', '2-1023/2025'."""
-    nums = re.findall(r"\d+", txt or "")
-    anos = [n for n in nums if len(n) == 4 and 2000 <= int(n) <= 2100]
-    if not anos:
+NUM_RE = re.compile(r"^\s*(?:(\d+)\s*TA\s*-?\s*)?(\d)\s*-\s*0*(\d+)\s*(?:[-/]\s*(\d{4}))?\s*-?\s*$", re.I)
+
+
+def chave_numero(c):
+    """Lê o nº do PNCP: '3-146' (ano no campo anoContrato), '2-205-2024', '1TA-3-094' (1º termo aditivo).
+    Devolve (termo_aditivo, unidade, sequencial, ano) ou None."""
+    m = NUM_RE.match(c.get("numeroContratoEmpenho") or "")
+    if not m:
         return None
-    ano = anos[-1]
-    resto = nums[:len(nums) - 1 - nums[::-1].index(ano)]  # números antes do ano
-    if not resto:
+    ano = int(m.group(4) or c.get("anoContrato") or 0)
+    if not ano:
         return None
-    # '2-1023-2025': o primeiro número (1 dígito) é a unidade, o segundo é o sequencial
-    seq = resto[1] if len(resto) >= 2 and len(resto[0]) == 1 else resto[-1]
-    return int(seq), int(ano)
+    return (int(m.group(1)) if m.group(1) else 0), m.group(2), int(m.group(3)), ano
 
 
 def simplifica(nome):
@@ -103,17 +103,40 @@ def main(src, dest):
     base = json.load(open(src, encoding="utf-8"))
     pncp = baixar_pncp()
 
-    por_chave = {}
+    por_chave, por_seq, aditivos = {}, {}, {}
     for c in pncp:
-        k = chave_numero(c.get("numeroContratoEmpenho"))
-        if k:
-            por_chave.setdefault(k, []).append(c)
+        k = chave_numero(c)
+        if not k:
+            continue
+        ta, un, seq, ano = k
+        if ta:
+            aditivos.setdefault((un, seq), []).append((ano, c))
+        else:
+            por_chave.setdefault((un, seq, ano), []).append(c)
+            por_seq.setdefault((seq, ano), []).append(c)
+
+    # o ano do termo aditivo no PNCP pode ser o ano do aditivo, não o do contrato:
+    # cada aditivo vai para o contrato de mesma unidade/sequencial com o maior ano <= ano do aditivo
+    anos_locais = {}
+    for r in base["vigentes"] + base["encerrados"]:
+        if r.get("seq"):
+            anos_locais.setdefault((r["un"], r["seq"]), set()).add(r["ano"])
+    tas_por_contrato = {}
+    for (un, seq), lista in aditivos.items():
+        anos = sorted(anos_locais.get((un, seq), ()))
+        for ano_ta, c in lista:
+            alvo = max([a for a in anos if a <= ano_ta], default=None)
+            if alvo:
+                tas_por_contrato.setdefault((un, seq, alvo), []).append(c)
 
     usados, resultado = set(), {}
     for r in base["vigentes"] + base["encerrados"]:
         if not r.get("seq"):
             continue
-        cands = por_chave.get((r["seq"], r["ano"]), [])
+        cands = por_chave.get((r["un"], r["seq"], r["ano"])) or por_seq.get((r["seq"], r["ano"]), [])
+        tas = tas_por_contrato.get((r["un"], r["seq"], r["ano"]), [])
+        for c in tas:
+            usados.add(c.get("numeroControlePNCP"))
         if r.get("doc"):
             fortes = [c for c in cands if re.sub(r"\D", "", c.get("niFornecedor") or "") == r["doc"]]
         else:
@@ -121,6 +144,8 @@ def main(src, dest):
         escolhido = (fortes or cands or [None])[0]
         if not escolhido:
             resultado[r["n"]] = {"st": "ausente"}
+            if tas:
+                resultado[r["n"]]["obs"] = "só os termos aditivos estão no PNCP"
             continue
         usados.add(escolhido.get("numeroControlePNCP"))
         v_pncp = escolhido.get("valorGlobal") or escolhido.get("valorInicial")
@@ -139,6 +164,13 @@ def main(src, dest):
             "fim": fim_pncp,
             "forn": escolhido.get("nomeRazaoSocialFornecedor"),
             "url": f"https://pncp.gov.br/app/contratos/{CNPJ}/{escolhido.get('anoContrato')}/{escolhido.get('sequencialContrato')}",
+            "tas": sorted([{
+                "num": c.get("numeroContratoEmpenho"),
+                "v": c.get("valorGlobal") or c.get("valorInicial"),
+                "ass": (c.get("dataAssinatura") or "")[:10],
+                "fim": (c.get("dataVigenciaFim") or "")[:10] or None,
+                "url": f"https://pncp.gov.br/app/contratos/{CNPJ}/{c.get('anoContrato')}/{c.get('sequencialContrato')}",
+            } for c in tas], key=lambda t: t["ass"]),
         }
 
     so_pncp = [{

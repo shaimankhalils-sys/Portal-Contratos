@@ -645,7 +645,9 @@ function openFicha(n) {
        <div class="grid" style="margin-top:12px">
          <div><div class="l">Nº de controle PNCP</div><div class="v num">${esc(p.ctrl || "—")}</div></div>
          <div><div class="l">Valor no PNCP</div><div class="v num">${brl(p.v)}</div></div>
-         <div><div class="l">Fim no PNCP</div><div class="v num">${fmtD(p.fim)}</div></div></div>`
+         <div><div class="l">Fim no PNCP</div><div class="v num">${fmtD(p.fim)}</div></div></div>
+       ${(p.tas || []).length ? `<div class="l" style="margin:14px 0 6px;font-size:12px;color:var(--ink-3)">Termos aditivos publicados no PNCP</div>
+         <ul class="top-list">${p.tas.map(t => `<li><span class="nm"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.num)}</a> <span class="muted">· assinado em ${fmtD(t.ass)}${t.fim ? " · fim " + fmtD(t.fim) : ""}</span></span><b class="num">${brl(t.v)}</b></li>`).join("")}</ul>` : ""}`
     : `<div class="doc-row">${pncpBadge(r)}<span class="muted">Nenhum contrato com o nº ${esc(r.n)} foi encontrado no PNCP.</span></div>`;
   dlg.innerHTML = `
     <div class="dh"><div><div class="k">Contrato ${esc(r.n)} · ${esc(UN[r.un] || "unidade não identificada")}</div>

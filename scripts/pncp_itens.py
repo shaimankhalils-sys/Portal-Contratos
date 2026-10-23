@@ -27,6 +27,13 @@ LIMITE_MINUTOS = 50         # para com segurança e continua na próxima execuç
 TRABALHADORES = 4           # requisições simultâneas ao PNCP (moderado)
 
 INICIO = time.time()
+LOG = []
+
+
+def log(msg):
+    linha = f"[{dt.datetime.now().strftime('%H:%M:%S')}] {msg}"
+    print(linha, flush=True)
+    LOG.append(linha)
 
 
 def tempo_ok():
@@ -163,13 +170,13 @@ def main(src_contratos, src_pncp, dest):
             continue
         fila.append((r, p))
     fila.sort(key=lambda x: x[0]["n"] in contratos)  # novos primeiro
-    print(f"Contratos vigentes no PNCP a ler agora: {len(fila)}", flush=True)
+    log(f"Contratos vigentes no PNCP a ler agora: {len(fila)}")
 
     cnpj_orgao = pncp.get("cnpj", "13650403000128")
-    lidos = sem_compra = 0
+    lidos = sem_compra = erros = 0
     for i, (r, p) in enumerate(fila, 1):
         if not tempo_ok():
-            print("Limite de tempo atingido; o restante fica para a próxima execução.", flush=True)
+            log("Limite de tempo atingido; o restante fica para a próxima execução.")
             break
         try:
             itens, srp, compra_num = [], False, None
@@ -195,9 +202,14 @@ def main(src_contratos, src_pncp, dest):
             }
             lidos += 1
         except Exception as e:
-            print(f"  erro em {r['n']}: {e}", flush=True)
+            erros += 1
+            if erros <= 15:
+                import traceback
+                log(f"  erro em {r['n']} (compra {p.get('compra')}): {type(e).__name__}: {e}")
+                if erros <= 2:
+                    log(traceback.format_exc())
         if i % 25 == 0:
-            print(f"  {i}/{len(fila)} contratos", flush=True)
+            log(f"  {i}/{len(fila)} contratos")
 
     # remove contratos que deixaram de ser vigentes
     vig = {r["n"] for r in base["vigentes"]}
@@ -206,9 +218,13 @@ def main(src_contratos, src_pncp, dest):
                "contratos": contratos},
               open(dest, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     com = sum(1 for c in contratos.values() if c["qi"])
-    print(f"Lidos agora: {lidos} | sem contratação vinculada: {sem_compra} | "
-          f"contratos com itens: {com} de {len(contratos)} | termos aditivos: {sum(c['adt'] for c in contratos.values())}", flush=True)
+    log(f"Lidos agora: {lidos} | erros: {erros} | sem contratação vinculada: {sem_compra} | "
+        f"contratos com itens: {com} de {len(contratos)} | termos aditivos: {sum(c['adt'] for c in contratos.values())}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    try:
+        main(sys.argv[1], sys.argv[2], sys.argv[3])
+    finally:
+        with open("data/itens_log.txt", "w", encoding="utf-8") as fh:
+            fh.write("\n".join(LOG) + "\n")

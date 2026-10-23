@@ -35,11 +35,12 @@ jobs:
             || { echo "O arquivo baixado não é um Excel. Confira se a planilha está compartilhada como 'qualquer pessoa com o link'."; exit 1; }
 
       - name: Gerar dados dos contratos
-        run: python scripts/build_data.py planilha.xlsx data/contratos.json
+        run: python -u scripts/build_data.py planilha.xlsx data/contratos.json
 
       - name: Conferir com o PNCP
         continue-on-error: true   # se o PNCP estiver fora do ar, mantém a última conferência
-        run: python scripts/pncp_sync.py data/contratos.json data/pncp.json
+        timeout-minutes: 20       # nunca deixa a rotina presa esperando o PNCP
+        run: python -u scripts/pncp_sync.py data/contratos.json data/pncp.json
 
       - name: Publicar se houve mudança
         run: |

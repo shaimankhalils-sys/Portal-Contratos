@@ -28,7 +28,7 @@ def get(params, tentativas=4):
         try:
             req = urllib.request.Request(url, headers={"Accept": "application/json",
                                                        "User-Agent": "contratos-tx/1.0"})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=40) as r:
                 if r.status == 204:
                     return {"data": [], "totalPaginas": 0}
                 return json.loads(r.read().decode("utf-8"))
@@ -37,7 +37,8 @@ def get(params, tentativas=4):
                 return {"data": [], "totalPaginas": 0}
             if i == tentativas - 1:
                 raise
-        except Exception:
+        except Exception as e:
+            print(f"  tentativa {i + 1} falhou: {e}", flush=True)
             if i == tentativas - 1:
                 raise
         time.sleep(3 * (i + 1))
@@ -46,6 +47,7 @@ def get(params, tentativas=4):
 def baixar_pncp():
     hoje = dt.date.today()
     todos = []
+    print("Consultando o PNCP (CNPJ " + CNPJ + ")...", flush=True)
     for ano in range(ANO_INICIAL, hoje.year + 1):
         ini = dt.date(ano, 1, 1)
         fim = min(dt.date(ano, 12, 31), hoje)

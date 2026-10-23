@@ -207,6 +207,9 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .docs svg{flex:none;color:var(--ink-3)}
 .docs .dn{flex:1;min-width:0;display:flex;flex-direction:column}
 .docs .btn{height:32px}
+table.mini th{cursor:default}
+table.mini td,table.mini th{padding:7px 10px;font-size:13px}
+table.mini tfoot td{border-bottom:0;border-top:2px solid var(--line)}
 .mini-doc{display:inline-flex;vertical-align:-2px;margin-left:6px;color:var(--ink-3)}
 .muted{color:var(--ink-3);font-size:12.5px}
 .df{padding:12px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;position:sticky;bottom:0;background:var(--surface)}
@@ -272,6 +275,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" data-tab="vig" aria-selected="true">Vigentes <span class="ct" id="ctVig"></span></button>
       <button class="tab" role="tab" data-tab="sec" aria-selected="false">Secretarias <span class="ct" id="ctSec"></span></button>
+      <button class="tab" role="tab" data-tab="adt" aria-selected="false">Aditivos <span class="ct" id="ctAdt"></span></button>
       <button class="tab" role="tab" data-tab="enc" aria-selected="false">Encerrados <span class="ct" id="ctEnc"></span></button>
       <button class="tab" role="tab" data-tab="pen" aria-selected="false">Pendências <span class="ct" id="ctPen"></span></button>
     </div>
@@ -294,6 +298,8 @@ const DRIVE_FILE = id => "https://drive.google.com/file/d/" + encodeURIComponent
 const DRIVE_FOLDER = id => "https://drive.google.com/drive/folders/" + encodeURIComponent(id);
 const fmtMB = b => b >= 1048576 ? (b / 1048576).toLocaleString("pt-BR", {maximumFractionDigits:1}) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 let MIN = {docs:{}};
+let ITX = {contratos:{}};
+const ITENS_CACHE = {};
 const PAGE = 50;
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -310,6 +316,7 @@ let DB, PN = {contratos:{}, so_pncp:[]}, UN = {};
 const state = {
   tab: "vig",
   sel: "",
+  adt: {q:"", tipo:"", sec:"", sort:"cel", dir:-1},
   vig: {q:"", un:"", sec:"", venc:"", pncp:"", min:"", ano:"", sort:"fe", dir:1, page:0},
   enc: {q:"", un:"", sec:"", sit:"", ano:"", sort:"fe", dir:-1, page:0},
 };
@@ -324,6 +331,7 @@ async function load() {
   DB = window.__CTX_DATA__ || await getJSON("data/contratos.json", null);
   PN = window.__CTX_PNCP__ || await getJSON("data/pncp.json", PN);
   MIN = window.__CTX_MIN__ || await getJSON("data/minutas.json", MIN);
+  ITX = window.__CTX_ITX__ || await getJSON("data/itens.json", ITX);
   if (MIN.pasta_raiz) $("#lnkMinutas").href = DRIVE_FOLDER(MIN.pasta_raiz);
   if (!DB) { $("#app").innerHTML = '<div class="empty">Não foi possível carregar data/contratos.json.</div>'; return; }
   UN = DB.unidades || {};
@@ -344,6 +352,8 @@ function prep(r, vig) {
   if (r.p && r.p.st === "ausente") r.p = null;  // "não encontrado" vem sem dados do PNCP
   r.ps = !PN.verificado_em ? "nv" : r.p ? r.p.st : (r.exigePncp ? "ausente" : "fora");
   r.docs = (MIN.docs && MIN.docs[r.n]) || [];
+  r.kbf = (ITX.contratos && ITX.contratos[r.n]) || null;
+  r.hist = historico(r);
   r.idx = fold([r.n, r.cr, r.obj, r.mod, r.sec, r.cid].join(" "));
 }
 
@@ -404,9 +414,11 @@ function render() {
   $("#ctVig").textContent = DB.vigentes.length.toLocaleString("pt-BR");
   $("#ctEnc").textContent = DB.encerrados.length.toLocaleString("pt-BR");
   $("#ctSec").textContent = secStats().length;
+  $("#ctAdt").textContent = todosAditivos().length.toLocaleString("pt-BR");
   $("#ctPen").textContent = pend.total.toLocaleString("pt-BR");
   if (state.tab === "pen") renderPend(pend);
   else if (state.tab === "sec") renderSec();
+  else if (state.tab === "adt") renderAdt();
   else renderList(state.tab);
   const pv = PN.verificado_em ? `PNCP verificado em ${fmtD(PN.verificado_em.slice(0,10))} às ${PN.verificado_em.slice(11,16)}` : "PNCP ainda não verificado";
   $("#pos").textContent = "Posição em " + fmtD(DB.gerado_em.slice(0,10));
@@ -585,6 +597,85 @@ function renderSec() {
   bindOpen();
 }
 
+/* ---------- aditivos (portal da transparência) ---------- */
+const TIPOS = [
+  ["reajuste", "Reajuste", /reajust/i],
+  ["reequilibrio", "Reequilíbrio", /reequil|equil[íi]brio econ/i],
+  ["repactuacao", "Repactuação", /repactu/i],
+  ["supressao", "Supressão", /supress/i],
+  ["acrescimo", "Acréscimo", /acr[ée]scimo|acresc/i],
+  ["prazo", "Prazo", /prorrog|prazo|vig[êe]ncia/i],
+];
+const TIPO_LBL = Object.fromEntries(TIPOS.map(t => [t[0], t[1]]).concat([["outro","Outro"]]));
+const tipoAditivo = a => (TIPOS.find(t => t[2].test(a.obj || "")) || ["outro"])[0];
+const cancelado = a => /cancel/i.test(a.sit || "") || /cancel/i.test(a.n || "");
+function historico(r) {
+  const ads = ((r.kbf && r.kbf.aditivos) || []).filter(a => !cancelado(a))
+    .sort((a, b) => String(a.cel || a.ini || "").localeCompare(String(b.cel || b.ini || "")));
+  let atual = r.v || 0;
+  return ads.map(a => {
+    const tipo = tipoAditivo(a);
+    const delta = (a.v || 0) * (tipo === "supressao" ? -1 : 1);
+    const ant = atual; atual = Math.round((atual + delta) * 100) / 100;
+    return {...a, tipo, ant, novo: atual, dif: delta, pct: ant ? delta / ant * 100 : null};
+  });
+}
+let _adtCache = null;
+function todosAditivos() {
+  if (_adtCache) return _adtCache;
+  _adtCache = [];
+  for (const r of DB.vigentes) for (const h of r.hist) _adtCache.push({r, ...h});
+  return _adtCache;
+}
+const pctFmt = p => p == null ? "" : (p > 0 ? "+" : "") + p.toLocaleString("pt-BR", {maximumFractionDigits:2}) + "%";
+const difFmt = v => (v > 0 ? "+" : v < 0 ? "−" : "") + brl(Math.abs(v)).replace("-", "");
+const tipoBadge = t => `<span class="badge ${({reajuste:"b-blue",reequilibrio:"b-amber",repactuacao:"b-amber",acrescimo:"b-green",supressao:"b-red"})[t] || "b-gray"}">${TIPO_LBL[t]}</span>`;
+function renderAdt() {
+  const f = state.adt;
+  const all = todosAditivos();
+  const terms = fold(f.q).split(/\s+/).filter(Boolean);
+  const rows = all.filter(a => (!f.tipo || a.tipo === f.tipo) && (!f.sec || a.r.sec === f.sec) &&
+      terms.every(t => fold([a.r.n, a.r.cr, a.n, a.obj].join(" ")).includes(t)))
+    .sort((a, b) => (f.sort === "dif" ? (a.dif - b.dif) : String(a.cel || "").localeCompare(String(b.cel || ""))) * f.dir);
+  current = rows.map(a => a.r);
+  const soma = t => all.filter(a => a.tipo === t).reduce((s, a) => s + a.dif, 0);
+  const n = t => all.filter(a => a.tipo === t).length;
+  const lidos = Object.keys(ITX.contratos || {}).length;
+  const kp = (t, color) => `<button class="kpi${f.tipo === t ? " on" : ""}" data-tipo="${t}" style="--k:${color}">
+      <div class="lb">${TIPO_LBL[t]}</div><div class="vl num">${n(t)}</div><div class="sb num">${difFmt(soma(t))}</div></button>`;
+  $("#app").innerHTML = !ITX.atualizado_em
+    ? `<section class="panel"><div class="note">Os aditivos são lidos do Portal da Transparência pela rotina noturna. Assim que a primeira leitura terminar, eles aparecem aqui com o valor anterior, o valor novo e a diferença de cada termo.</div></section>`
+    : `<section class="kpis">${kp("reajuste","var(--blue)")}${kp("reequilibrio","var(--amber)")}${kp("repactuacao","var(--yellow)")}${kp("acrescimo","var(--green)")}${kp("supressao","var(--red)")}${kp("prazo","var(--ink-3)")}</section>
+    <section class="panel"><div class="filters" style="grid-template-columns:minmax(200px,2fr) repeat(2,minmax(0,1fr)) auto">
+      <div class="f search"><label for="aq">Pesquisar</label>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="aq" type="search" placeholder="Nº do contrato, credor, termo, objetivo…" value="${esc(f.q)}" autocomplete="off"></div>
+      <div class="f"><label for="aTipo">Tipo</label><select id="aTipo"><option value="">Todos</option>${opts(Object.keys(TIPO_LBL), f.tipo, v => TIPO_LBL[v])}</select></div>
+      <div class="f"><label for="aSec">Secretaria</label><select id="aSec"><option value="">Todas</option>${opts(uniq(DB.vigentes, "sec"), f.sec, cap)}</select></div>
+      <div class="f btns"><button class="btn" id="aClear" type="button">Limpar</button></div></div>
+      <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> termo(s) · diferença total <b class="num">${difFmt(rows.reduce((s, a) => s + a.dif, 0))}</b> · lidos do portal em ${fmtD(ITX.atualizado_em.slice(0,10))} (${lidos.toLocaleString("pt-BR")} contratos)</div></section>
+    <section class="panel"><div class="tbl-wrap"><table><thead><tr>
+      <th data-s="cel" class="${f.sort === "cel" ? "sorted" : ""}">Data<span class="ar">${f.sort === "cel" ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th><th>Contrato / termo</th><th>Tipo</th>
+      <th class="r">Valor anterior</th><th class="r">Valor novo</th><th class="r ${f.sort === "dif" ? "sorted" : ""}" data-s="dif">Diferença<span class="ar">${f.sort === "dif" ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th>
+    </tr></thead><tbody>${rows.slice(0, 300).map(a => `<tr data-open="${esc(a.r.n)}" tabindex="0">
+      <td class="num">${fmtD(a.cel || a.ini)}</td>
+      <td class="cr"><div class="t1"><span class="num">${esc(a.r.n)}</span> · ${esc(a.n)}</div><div class="t2 clip">${esc(a.r.cr)} — ${esc(a.obj)}</div></td>
+      <td>${tipoBadge(a.tipo)}</td>
+      <td class="r num">${brl(a.ant)}</td><td class="r num">${brl(a.novo)}</td>
+      <td class="r num"><b>${a.dif ? difFmt(a.dif) : "—"}</b><div class="t2">${a.dif ? pctFmt(a.pct) : ""}</div></td></tr>`).join("") ||
+      `<tr><td colspan="6" class="empty">Nenhum termo aditivo com esses filtros.</td></tr>`}</tbody></table></div>
+      ${rows.length > 300 ? `<div class="pager">Mostrando 300 de ${rows.length}. Use os filtros para refinar.</div>` : ""}</section>`;
+  if (!ITX.atualizado_em) return;
+  const q = $("#aq"); let t;
+  q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = q.value; const pos = q.selectionStart; render(); const n2 = $("#aq"); n2.focus(); n2.setSelectionRange(pos, pos); }, 160); });
+  $("#aTipo").onchange = e => { f.tipo = e.target.value; render(); };
+  $("#aSec").onchange = e => { f.sec = e.target.value; render(); };
+  $("#aClear").onclick = () => { Object.assign(f, {q:"", tipo:"", sec:""}); render(); };
+  document.querySelectorAll(".kpi[data-tipo]").forEach(b => b.onclick = () => { f.tipo = f.tipo === b.dataset.tipo ? "" : b.dataset.tipo; render(); });
+  document.querySelectorAll("th[data-s]").forEach(th => th.onclick = () => { if (f.sort === th.dataset.s) f.dir *= -1; else { f.sort = th.dataset.s; f.dir = -1; } render(); });
+  bindOpen();
+}
+
 /* ---------- pendências ---------- */
 function pendencias() {
   const v = DB.vigentes;
@@ -623,6 +714,27 @@ function renderPend(p) {
         <div class="note">${DB.avisos.map(a => "• " + esc(a)).join("<br>")}<br><br>Valores em formatos diferentes e nomes de secretaria com grafias diferentes (ADM/ADMINISTRAÇÃO, INFRA/INFRAESTRUTURA, SAUDE/SAÚDE…) também foram padronizados.</div></section>` : ""}
     </div>`;
   bindOpen();
+}
+
+/* ---------- itens (carregados sob demanda) ---------- */
+async function carregarItens(r) {
+  const n = r.n;
+  let itens = ITENS_CACHE[n] || (window.__CTX_ITENS__ && window.__CTX_ITENS__[n]);
+  if (!itens) itens = await getJSON("data/itens/" + encodeURIComponent(n) + ".json", null);
+  const box = $("#itensBox");
+  if (!box || !dlg.open || !$("#fTitle") || current[0] === undefined && false) return;
+  if (!itens) { box.innerHTML = '<span class="muted">Não foi possível carregar os itens.</span>'; return; }
+  ITENS_CACHE[n] = itens;
+  const total = itens.reduce((s, x) => s + (x.total || 0), 0);
+  const LIM = 12, muitos = itens.length > LIM;
+  const linha = (x, i) => `<tr${muitos && i >= LIM ? ' class="mais" hidden' : ""}><td class="num muted">${i + 1}</td><td>${esc(x.prod)}${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
+    <td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
+  box.innerHTML = `<div class="tbl-wrap"><table class="mini"><thead><tr><th>#</th><th>Produto / serviço</th><th class="r">Qtd.</th><th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
+    <tbody>${itens.map(linha).join("")}</tbody>
+    <tfoot><tr><td></td><td><b>${itens.length} item(ns)</b></td><td></td><td></td><td class="r num"><b>${brl(total)}</b></td></tr></tfoot></table></div>
+    ${muitos ? `<button class="btn" id="maisItens" type="button" style="margin-top:8px">Mostrar todos os ${itens.length} itens</button>` : ""}
+    ${r.v && Math.abs(total - r.v) > Math.max(1, r.v * 0.01) ? `<div class="muted" style="margin-top:6px">A soma dos itens (${brl(total)}) difere do valor da planilha (${brl(r.v)}).</div>` : ""}`;
+  const b = $("#maisItens"); if (b) b.onclick = () => { box.querySelectorAll("tr.mais").forEach(t => t.hidden = false); b.remove(); };
 }
 
 /* ---------- ficha ---------- */
@@ -664,7 +776,20 @@ function openFicha(n) {
       <button class="x" id="fx" aria-label="Fechar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     <div class="db">
       <div class="sec"><h4>Objeto</h4><div>${esc(r.obj || "—")}</div></div>
-      <div class="sec"><h4>Valor e vigência</h4><div class="money num">${brl(r.v)}</div>${tl}</div>
+      <div class="sec"><h4>Valor e vigência</h4>
+        ${r.hist.length ? `<div class="doc-row" style="align-items:baseline"><div class="money num">${brl(r.hist[r.hist.length - 1].novo)}</div>
+          <span class="muted">valor atual · original ${brl(r.v)} · ${difFmt(r.hist[r.hist.length - 1].novo - (r.v || 0))} (${pctFmt(r.v ? (r.hist[r.hist.length - 1].novo - r.v) / r.v * 100 : null)})</span></div>`
+          : `<div class="money num">${brl(r.v)}</div>`}${tl}</div>
+      ${r.hist.length ? `<div class="sec"><h4>Aditivos · valor anterior, novo e diferença</h4><div class="tbl-wrap"><table class="mini">
+        <thead><tr><th>Termo</th><th>Tipo</th><th>Data</th><th class="r">Anterior</th><th class="r">Novo</th><th class="r">Diferença</th></tr></thead>
+        <tbody>${r.hist.map(h => `<tr><td><b class="num">${esc(h.n)}</b><div class="t2 clip">${esc(h.obj)}</div></td><td>${tipoBadge(h.tipo)}</td>
+          <td class="num">${fmtD(h.cel || h.ini)}${h.fim ? `<div class="t2">até ${fmtD(h.fim)}</div>` : ""}</td>
+          <td class="r num">${brl(h.ant)}</td><td class="r num">${brl(h.novo)}</td><td class="r num"><b>${h.dif ? difFmt(h.dif) : "—"}</b><div class="t2">${h.dif ? pctFmt(h.pct) : ""}</div></td></tr>`).join("")}</tbody></table></div>
+        <div class="muted" style="margin-top:6px">Fonte: Portal da Transparência, lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. Termos cancelados não entram na conta.</div></div>` : ""}
+      <div class="sec"><h4>Itens do contrato</h4><div id="itensBox">${
+        !r.kbf ? `<span class="muted">${ITX.atualizado_em ? "Este contrato não foi encontrado no Portal da Transparência." : "Os itens são lidos do Portal da Transparência pela rotina noturna e aparecem aqui após a primeira leitura."}</span>`
+        : !r.kbf.qi ? `<span class="muted">Nenhum item cadastrado para este contrato no Portal da Transparência.</span>`
+        : `<span class="muted">Carregando ${r.kbf.qi} item(ns)…</span>`}</div></div>
       <div class="sec"><h4>Informações</h4><div class="grid">
         <div><div class="l">Nº da modalidade / processo</div><div class="v num">${esc(r.mod || "—")}</div></div>
         <div><div class="l">Secretaria responsável</div><div class="v">${esc(cap(r.sec) || "—")}</div></div>
@@ -690,6 +815,7 @@ function openFicha(n) {
   $("#fPrev").onclick = () => openFicha(current[pos - 1].n);
   $("#fNext").onclick = () => openFicha(current[pos + 1].n);
   if (!dlg.open) dlg.showModal();
+  if (r.kbf && r.kbf.qi) carregarItens(r);
   dlg.scrollTop = 0;
 }
 dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });

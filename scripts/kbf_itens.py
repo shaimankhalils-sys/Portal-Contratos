@@ -17,7 +17,7 @@ Como funciona (com um navegador automático, igual a um visitante):
 É incremental: só relê um contrato se ele for novo, se a quantidade de aditivos mudou
 ou se a última leitura tem mais de 30 dias. Faz pausas entre as páginas.
 """
-import sys, os, re, json, time, datetime as dt
+import sys, os, re, json, time, traceback, datetime as dt
 
 from playwright.sync_api import sync_playwright
 
@@ -135,6 +135,21 @@ def ler_aditivos(html):
 
 
 # ---------- navegação ----------
+def diagnostico(page, onde):
+    """Registra no log o que o navegador está vendo (para investigar falhas)."""
+    try:
+        log(f"Diagnóstico ({onde}): título='{page.title()}' url={page.url.split('?')[0]}")
+        for f in page.frames:
+            u = f.url.split("?")[0]
+            q = f.url.split("formID=")[1].split("&")[0] if "formID=" in f.url else ""
+            log(f"  frame {u} formID={q}")
+        txt = page.inner_text("body")[:400].replace("\n", " ")
+        log(f"  texto: {txt}")
+        page.screenshot(path="data/kbf_debug.png", full_page=True)
+    except Exception as e:
+        log(f"  (diagnóstico falhou: {e})")
+
+
 def frame_da_lista(page):
     for _ in range(40):
         for f in page.frames:
@@ -144,6 +159,7 @@ def frame_da_lista(page):
             except Exception:
                 pass
         time.sleep(0.5)
+    diagnostico(page, "tela de contratos")
     raise RuntimeError("Tela de contratos não encontrada (o portal pode ter mudado).")
 
 
@@ -197,7 +213,12 @@ def main(src, dest):
         page.goto(ENTRADA, wait_until="load", timeout=120_000)
         time.sleep(3)
 
-        for n, chave, valor, qtadt, sit, fim in listar_contratos(page, inicio):
+        try:
+            lista = listar_contratos(page, inicio)
+        except Exception:
+            diagnostico(page, "lista")
+            raise
+        for n, chave, valor, qtadt, sit, fim in lista:
             n = n.strip()
             if n and chave:
                 indice[n] = {"chave": chave, "adt": int(float(qtadt or 0)), "v": num_br(valor),
@@ -260,6 +281,9 @@ def main(src, dest):
 if __name__ == "__main__":
     try:
         main(sys.argv[1], sys.argv[2])
+    except Exception:
+        log("FALHA:\n" + traceback.format_exc())
+        raise
     finally:
         os.makedirs("data", exist_ok=True)
         with open("data/kbf_log.txt", "w", encoding="utf-8") as fh:

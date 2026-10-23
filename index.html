@@ -339,7 +339,8 @@ function prep(r, vig) {
   // Lei 14.133: modalidade de 2024 em diante exige PNCP; antes disso (Lei 8.666) não é cobrado.
   const anosMod = (r.mod || "").match(/(?<!\d)20\d{2}(?!\d)/g);
   r.modAno = anosMod ? +anosMod[anosMod.length - 1] : null;
-  r.exigePncp = (r.modAno || r.ano || 0) >= PNCP_DESDE;
+  // "PE EXTERNO" (adesão) é lançado pela Prefeitura: vale o ano do contrato
+  r.exigePncp = (/EXTERNO/i.test(r.mod || "") ? r.ano : (r.modAno || r.ano) || 0) >= PNCP_DESDE;
   if (r.p && r.p.st === "ausente") r.p = null;  // "não encontrado" vem sem dados do PNCP
   r.ps = !PN.verificado_em ? "nv" : r.p ? r.p.st : (r.exigePncp ? "ausente" : "fora");
   r.docs = (MIN.docs && MIN.docs[r.n]) || [];

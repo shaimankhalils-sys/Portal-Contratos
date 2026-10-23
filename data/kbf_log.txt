@@ -1,2 +1,22 @@
-[20:18:39] Abrindo o portal da transparência...
-[20:18:42] Abrindo a lista de contratos a partir de 01/01/2021...
+[20:20:40] Abrindo o portal da transparência...
+[20:20:43] Abrindo a lista de contratos a partir de 01/01/2021...
+[20:21:04] Diagnóstico (tela de contratos): título='Attention Required! | Cloudflare' url=https://portaldatransparencia.sistemasonline.net.br/webrun5/form.jsp
+[20:21:04]   frame https://portaldatransparencia.sistemasonline.net.br/webrun5/form.jsp formID=8522
+[20:21:04]   texto: Sorry, you have been blocked You are unable to access sistemasonline.net.br Why have I been blocked?  This website is using a security service to protect itself from online attacks. The action you just performed triggered the security solution. There are several actions that could trigger this block including submitting a certain word or phrase, a SQL command or malformed data.  What can I do to r
+[20:21:04] Diagnóstico (lista): título='Attention Required! | Cloudflare' url=https://portaldatransparencia.sistemasonline.net.br/webrun5/form.jsp
+[20:21:04]   frame https://portaldatransparencia.sistemasonline.net.br/webrun5/form.jsp formID=8522
+[20:21:04]   texto: Sorry, you have been blocked You are unable to access sistemasonline.net.br Why have I been blocked?  This website is using a security service to protect itself from online attacks. The action you just performed triggered the security solution. There are several actions that could trigger this block including submitting a certain word or phrase, a SQL command or malformed data.  What can I do to r
+[20:21:04] FALHA:
+Traceback (most recent call last):
+  File "/home/runner/work/Portal-Contratos/Portal-Contratos/scripts/kbf_itens.py", line 283, in <module>
+    main(sys.argv[1], sys.argv[2])
+  File "/home/runner/work/Portal-Contratos/Portal-Contratos/scripts/kbf_itens.py", line 217, in main
+    lista = listar_contratos(page, inicio)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Portal-Contratos/Portal-Contratos/scripts/kbf_itens.py", line 169, in listar_contratos
+    f = frame_da_lista(page)
+        ^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Portal-Contratos/Portal-Contratos/scripts/kbf_itens.py", line 163, in frame_da_lista
+    raise RuntimeError("Tela de contratos não encontrada (o portal pode ter mudado).")
+RuntimeError: Tela de contratos não encontrada (o portal pode ter mudado).
+

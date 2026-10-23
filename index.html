@@ -614,8 +614,9 @@ function historico(r) {
     .sort((a, b) => String(a.cel || a.ini || "").localeCompare(String(b.cel || b.ini || "")));
   let atual = r.v || 0;
   return ads.map(a => {
-    const tipo = tipoAditivo(a);
-    const delta = (a.v || 0) * (tipo === "supressao" ? -1 : 1);
+    const tipo = a.tipo || tipoAditivo(a);
+    // no PNCP o "valor acrescido" já vem com sinal (negativo = supressão)
+    const delta = a.fonte === "PNCP" ? (a.v || 0) : (a.v || 0) * (tipo === "supressao" ? -1 : 1);
     const ant = atual; atual = Math.round((atual + delta) * 100) / 100;
     return {...a, tipo, ant, novo: atual, dif: delta, pct: ant ? delta / ant * 100 : null};
   });
@@ -644,7 +645,7 @@ function renderAdt() {
   const kp = (t, color) => `<button class="kpi${f.tipo === t ? " on" : ""}" data-tipo="${t}" style="--k:${color}">
       <div class="lb">${TIPO_LBL[t]}</div><div class="vl num">${n(t)}</div><div class="sb num">${difFmt(soma(t))}</div></button>`;
   $("#app").innerHTML = !ITX.atualizado_em
-    ? `<section class="panel"><div class="note">Os aditivos são lidos do Portal da Transparência pela rotina noturna. Assim que a primeira leitura terminar, eles aparecem aqui com o valor anterior, o valor novo e a diferença de cada termo.</div></section>`
+    ? `<section class="panel"><div class="note">Os termos aditivos são lidos do PNCP pela rotina automática. Assim que a primeira leitura terminar, eles aparecem aqui com o valor anterior, o valor novo e a diferença de cada termo.</div></section>`
     : `<section class="kpis">${kp("reajuste","var(--blue)")}${kp("reequilibrio","var(--amber)")}${kp("repactuacao","var(--yellow)")}${kp("acrescimo","var(--green)")}${kp("supressao","var(--red)")}${kp("prazo","var(--ink-3)")}</section>
     <section class="panel"><div class="filters" style="grid-template-columns:minmax(200px,2fr) repeat(2,minmax(0,1fr)) auto">
       <div class="f search"><label for="aq">Pesquisar</label>
@@ -653,7 +654,7 @@ function renderAdt() {
       <div class="f"><label for="aTipo">Tipo</label><select id="aTipo"><option value="">Todos</option>${opts(Object.keys(TIPO_LBL), f.tipo, v => TIPO_LBL[v])}</select></div>
       <div class="f"><label for="aSec">Secretaria</label><select id="aSec"><option value="">Todas</option>${opts(uniq(DB.vigentes, "sec"), f.sec, cap)}</select></div>
       <div class="f btns"><button class="btn" id="aClear" type="button">Limpar</button></div></div>
-      <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> termo(s) · diferença total <b class="num">${difFmt(rows.reduce((s, a) => s + a.dif, 0))}</b> · lidos do portal em ${fmtD(ITX.atualizado_em.slice(0,10))} (${lidos.toLocaleString("pt-BR")} contratos)</div></section>
+      <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> termo(s) · diferença total <b class="num">${difFmt(rows.reduce((s, a) => s + a.dif, 0))}</b> · fonte ${ITX.fonte === "PNCP" ? "PNCP" : "Portal da Transparência"}, lido em ${fmtD(ITX.atualizado_em.slice(0,10))} (${lidos.toLocaleString("pt-BR")} contratos)</div></section>
     <section class="panel"><div class="tbl-wrap"><table><thead><tr>
       <th data-s="cel" class="${f.sort === "cel" ? "sorted" : ""}">Data<span class="ar">${f.sort === "cel" ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th><th>Contrato / termo</th><th>Tipo</th>
       <th class="r">Valor anterior</th><th class="r">Valor novo</th><th class="r ${f.sort === "dif" ? "sorted" : ""}" data-s="dif">Diferença<span class="ar">${f.sort === "dif" ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th>
@@ -728,10 +729,12 @@ async function carregarItens(r) {
   const total = itens.reduce((s, x) => s + (x.total || 0), 0);
   const LIM = 12, muitos = itens.length > LIM;
   const linha = (x, i) => `<tr${muitos && i >= LIM ? ' class="mais" hidden' : ""}><td class="num muted">${i + 1}</td><td>${esc(x.prod)}${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
-    <td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
-  box.innerHTML = `<div class="tbl-wrap"><table class="mini"><thead><tr><th>#</th><th>Produto / serviço</th><th class="r">Qtd.</th><th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
+    <td class="muted">${esc(x.un || "")}</td><td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
+  const srp = r.kbf && r.kbf.srp;
+  box.innerHTML = `${r.kbf && r.kbf.fonte === "PNCP" ? `<div class="muted" style="margin-bottom:8px">Itens vencidos por este fornecedor na contratação de origem${r.kbf.compra_num ? ` (nº ${esc(r.kbf.compra_num)})` : ""}, segundo o PNCP.${srp ? " <b>Registro de preços:</b> a quantidade é a homologada na ata e pode ser maior que a deste contrato." : ""}</div>` : ""}
+    <div class="tbl-wrap"><table class="mini"><thead><tr><th>#</th><th>Produto / serviço</th><th>Un.</th><th class="r">Qtd.</th><th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
     <tbody>${itens.map(linha).join("")}</tbody>
-    <tfoot><tr><td></td><td><b>${itens.length} item(ns)</b></td><td></td><td></td><td class="r num"><b>${brl(total)}</b></td></tr></tfoot></table></div>
+    <tfoot><tr><td></td><td><b>${itens.length} item(ns)</b></td><td></td><td></td><td></td><td class="r num"><b>${brl(total)}</b></td></tr></tfoot></table></div>
     ${muitos ? `<button class="btn" id="maisItens" type="button" style="margin-top:8px">Mostrar todos os ${itens.length} itens</button>` : ""}
     ${r.v && Math.abs(total - r.v) > Math.max(1, r.v * 0.01) ? `<div class="muted" style="margin-top:6px">A soma dos itens (${brl(total)}) difere do valor da planilha (${brl(r.v)}).</div>` : ""}`;
   const b = $("#maisItens"); if (b) b.onclick = () => { box.querySelectorAll("tr.mais").forEach(t => t.hidden = false); b.remove(); };
@@ -785,10 +788,13 @@ function openFicha(n) {
         <tbody>${r.hist.map(h => `<tr><td><b class="num">${esc(h.n)}</b><div class="t2 clip">${esc(h.obj)}</div></td><td>${tipoBadge(h.tipo)}</td>
           <td class="num">${fmtD(h.cel || h.ini)}${h.fim ? `<div class="t2">até ${fmtD(h.fim)}</div>` : ""}</td>
           <td class="r num">${brl(h.ant)}</td><td class="r num">${brl(h.novo)}</td><td class="r num"><b>${h.dif ? difFmt(h.dif) : "—"}</b><div class="t2">${h.dif ? pctFmt(h.pct) : ""}</div></td></tr>`).join("")}</tbody></table></div>
-        <div class="muted" style="margin-top:6px">Fonte: Portal da Transparência, lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. Termos cancelados não entram na conta.</div></div>` : ""}
+        <div class="muted" style="margin-top:6px">Fonte: ${r.kbf.fonte === "PNCP" ? `PNCP (termos do contrato), lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. O tipo de cada termo segue a qualificação informada no PNCP.` : `Portal da Transparência, lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. Termos cancelados não entram na conta.`}</div></div>` : ""}
       <div class="sec"><h4>Itens do contrato</h4><div id="itensBox">${
-        !r.kbf ? `<span class="muted">${ITX.atualizado_em ? "Este contrato não foi encontrado no Portal da Transparência." : "Os itens são lidos do Portal da Transparência pela rotina noturna e aparecem aqui após a primeira leitura."}</span>`
-        : !r.kbf.qi ? `<span class="muted">Nenhum item cadastrado para este contrato no Portal da Transparência.</span>`
+        !r.kbf ? `<span class="muted">${!ITX.atualizado_em ? "Os itens são lidos do PNCP pela rotina automática e aparecem aqui após a primeira leitura."
+              : r.vig && (r.ps === "ausente" || r.ps === "nv") ? "Os itens aparecem quando o contrato estiver publicado no PNCP."
+              : r.ps === "fora" ? "Contrato anterior ao PNCP (Lei 8.666): os itens não estão disponíveis por essa fonte."
+              : "Itens ainda não lidos do PNCP."}</span>`
+        : !r.kbf.qi ? `<span class="muted">${r.kbf.compra ? "Não foi possível identificar no PNCP os itens vencidos por este fornecedor na contratação de origem." : "O contrato não está vinculado a uma contratação no PNCP, por isso os itens não estão disponíveis."}</span>`
         : `<span class="muted">Carregando ${r.kbf.qi} item(ns)…</span>`}</div></div>
       <div class="sec"><h4>Informações</h4><div class="grid">
         <div><div class="l">Nº da modalidade / processo</div><div class="v num">${esc(r.mod || "—")}</div></div>

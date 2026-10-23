@@ -163,6 +163,10 @@ def main(src, dest):
             "v": v_pncp,
             "fim": fim_pncp,
             "forn": escolhido.get("nomeRazaoSocialFornecedor"),
+            "ni": re.sub(r"\D", "", escolhido.get("niFornecedor") or ""),
+            "compra": escolhido.get("numeroControlePncpCompra"),
+            "ano": escolhido.get("anoContrato"),
+            "seq": escolhido.get("sequencialContrato"),
             "url": f"https://pncp.gov.br/app/contratos/{CNPJ}/{escolhido.get('anoContrato')}/{escolhido.get('sequencialContrato')}",
             "tas": sorted([{
                 "num": c.get("numeroContratoEmpenho"),

@@ -45,6 +45,11 @@ jobs:
         timeout-minutes: 20       # nunca deixa a rotina presa esperando o PNCP
         run: python -u scripts/pncp_sync.py data/contratos.json data/pncp.json
 
+      - name: Itens e termos aditivos (PNCP)
+        continue-on-error: true
+        timeout-minutes: 55
+        run: python -u scripts/pncp_itens.py data/contratos.json data/pncp.json data/itens.json
+
       - name: Publicar se houve mudança
         run: |
           rm -f planilha.xlsx

@@ -40,20 +40,38 @@ def tempo_ok():
     return (time.time() - INICIO) / 60 < LIMITE_MINUTOS
 
 
+REDIR_VISTO = set()
+
+
 def get(url, tentativas=4):
+    """GET com JSON, seguindo redirecionamentos (o PNCP responde 301 em alguns endereços)."""
     for i in range(tentativas):
+        alvo = url
         try:
-            req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "portal-contratos-tx/1.0"})
-            with urllib.request.urlopen(req, timeout=40) as r:
-                if r.status == 204:
-                    return []
-                corpo = r.read()
-                return json.loads(corpo.decode("utf-8")) if corpo else []
+            for _ in range(6):  # segue até 5 redirecionamentos
+                req = urllib.request.Request(alvo, headers={"Accept": "application/json", "User-Agent": "portal-contratos-tx/1.0"})
+                try:
+                    with urllib.request.urlopen(req, timeout=40) as r:
+                        if r.status == 204:
+                            return []
+                        corpo = r.read()
+                        return json.loads(corpo.decode("utf-8")) if corpo else []
+                except urllib.error.HTTPError as e:
+                    if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+                        novo = urllib.parse.urljoin(alvo, e.headers["Location"])
+                        chave = re.sub(r"\d+", "N", urllib.parse.urlparse(alvo).path) + " -> " + re.sub(r"\d+", "N", urllib.parse.urlparse(novo).path)
+                        if chave not in REDIR_VISTO and len(REDIR_VISTO) < 5:
+                            REDIR_VISTO.add(chave)
+                            log(f"  redirecionamento: {chave}")
+                        alvo = novo
+                        continue
+                    raise
+            raise RuntimeError("redirecionamentos demais")
         except urllib.error.HTTPError as e:
             if e.code in (204, 404):
                 return []
-            if i == tentativas - 1:
-                raise
+            if 400 <= e.code < 500 or i == tentativas - 1:
+                raise  # erro do pedido: não adianta repetir
         except Exception:
             if i == tentativas - 1:
                 raise
@@ -208,6 +226,9 @@ def main(src_contratos, src_pncp, dest):
                 log(f"  erro em {r['n']} (compra {p.get('compra')}): {type(e).__name__}: {e}")
                 if erros <= 2:
                     log(traceback.format_exc())
+        if i >= 15 and lidos == 0:
+            log("Os 15 primeiros contratos falharam; parando para investigar.")
+            break
         if i % 25 == 0:
             log(f"  {i}/{len(fila)} contratos")
 

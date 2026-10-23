@@ -336,7 +336,12 @@ function prep(r, vig) {
   r.vig = vig;
   r.d = daysTo(r.fe);
   r.p = PN.contratos?.[r.n] || null;
-  r.ps = !PN.verificado_em ? "nv" : r.p ? r.p.st : "ausente";
+  // Lei 14.133: modalidade de 2024 em diante exige PNCP; antes disso (Lei 8.666) não é cobrado.
+  const anosMod = (r.mod || "").match(/(?<!\d)20\d{2}(?!\d)/g);
+  r.modAno = anosMod ? +anosMod[anosMod.length - 1] : null;
+  r.exigePncp = (r.modAno || r.ano || 0) >= PNCP_DESDE;
+  if (r.p && r.p.st === "ausente") r.p = null;  // "não encontrado" vem sem dados do PNCP
+  r.ps = !PN.verificado_em ? "nv" : r.p ? r.p.st : (r.exigePncp ? "ausente" : "fora");
   r.docs = (MIN.docs && MIN.docs[r.n]) || [];
   r.idx = fold([r.n, r.cr, r.obj, r.mod, r.sec, r.cid].join(" "));
 }
@@ -357,7 +362,8 @@ function sitBadge(r) {
   const cls = s === "RESCINDIDO" ? "b-red" : s === "NÃO RENOVOU" ? "b-gray" : s.includes("INCORRETA") ? "b-amber" : "b-gray";
   return `<span class="badge ${cls}">${esc(s.charAt(0) + s.slice(1).toLowerCase())}</span>`;
 }
-const PNCP_LBL = {ok:["Publicado","b-green"], divergente:["Divergente","b-amber"], ausente:["Não encontrado","b-red"], nv:["Não verificado","b-gray"]};
+const PNCP_DESDE = 2024;
+const PNCP_LBL = {ok:["Publicado","b-green"], divergente:["Divergente","b-amber"], ausente:["Não encontrado","b-red"], fora:["Lei 8.666 · não exige","b-gray"], nv:["Não verificado","b-gray"]};
 const pncpBadge = r => { const [t,c] = PNCP_LBL[r.ps]; return `<span class="badge ${c}">${t}</span>`; };
 const vencBucket = r => r.d == null ? "" : r.d < 0 ? "vencido" : r.d <= 30 ? "30" : r.d <= 90 ? "90" : "mais";
 
@@ -447,7 +453,7 @@ function renderList(tab) {
       <div class="f"><label for="fSec">Secretaria</label><select id="fSec"><option value="">Todas</option>${opts(secs, f.sec, v => v.charAt(0) + v.slice(1).toLowerCase())}</select></div>
       ${tab === "vig"
         ? `<div class="f"><label for="fVenc">Vencimento</label><select id="fVenc"><option value="">Todos</option>${opts(["vencido","30","90","mais"], f.venc, v => ({vencido:"Vencidos sem baixa","30":"Até 30 dias","90":"31 a 90 dias",mais:"Mais de 90 dias"})[v])}</select></div>
-           <div class="f"><label for="fPncp">PNCP</label><select id="fPncp"><option value="">Todos</option>${opts(["ok","divergente","ausente","nv"], f.pncp, v => PNCP_LBL[v][0])}</select></div>`
+           <div class="f"><label for="fPncp">PNCP</label><select id="fPncp"><option value="">Todos</option>${opts(["ok","divergente","ausente","fora"], f.pncp, v => PNCP_LBL[v][0])}</select></div>`
         : `<div class="f"><label for="fSit">Situação</label><select id="fSit"><option value="">Todas</option>${opts(uniq(all, "sit"), f.sit, v => v.charAt(0) + v.slice(1).toLowerCase())}</select></div>
 `}
       ${tab === "vig" ? `<div class="f"><label for="fMin">Minuta</label><select id="fMin"><option value="">Todas</option>${opts(["sim","nao"], f.min, v => v === "sim" ? "Com minuta" : "Sem minuta")}</select></div>` : ""}
@@ -597,7 +603,7 @@ function renderPend(p) {
       <div style="text-align:right">${extra(r)}</div></div>`).join("") : '<div class="note">Nada pendente aqui.</div>';
   const box = (title, sub, body) => `<section class="panel"><div class="panel-h"><h2>${title}</h2><small>${sub}</small></div><div class="issue-list">${body}</div></section>`;
   const pncpBox = PN.verificado_em
-    ? box("Divergências com o PNCP", `${p.pncpProb.length} contrato(s)`, list(p.pncpProb, r => pncpBadge(r) + (r.p?.obs ? `<div class="t2 muted">${esc(r.p.obs)}</div>` : "")))
+    ? box("Pendências no PNCP", `${p.pncpProb.length} contrato(s) · modalidades de ${PNCP_DESDE} em diante`, list(p.pncpProb, r => pncpBadge(r) + (r.p?.obs ? `<div class="t2 muted">${esc(r.p.obs)}</div>` : "")))
     : box("Divergências com o PNCP", "aguardando 1ª verificação", `<div class="note">A conferência com o PNCP é feita pela rotina automática no GitHub, que consulta todos os contratos publicados com o CNPJ <b>13.650.403/0001-28</b> e marca cada contrato da planilha como <b>publicado</b>, <b>divergente</b> ou <b>não encontrado</b>. Ela também lista contratos que estão no PNCP mas não estão na planilha. Assim que a rotina rodar pela primeira vez, os resultados aparecem aqui.</div>`);
   const soBox = PN.verificado_em ? box("No PNCP, mas fora da planilha", `${p.so.length} contrato(s)`,
       p.so.length ? p.so.map(s => `<a class="issue-row" style="text-decoration:none;color:inherit" href="${esc(s.url)}" target="_blank" rel="noopener"><div><div style="font-weight:600" class="num">${esc(s.num || "s/ nº")}</div><div class="muted">${esc(s.forn)}</div></div><div class="num">${brl(s.v)}</div></a>`).join("") : '<div class="note">Nada pendente aqui.</div>') : "";
@@ -648,7 +654,9 @@ function openFicha(n) {
          <div><div class="l">Fim no PNCP</div><div class="v num">${fmtD(p.fim)}</div></div></div>
        ${(p.tas || []).length ? `<div class="l" style="margin:14px 0 6px;font-size:12px;color:var(--ink-3)">Termos aditivos publicados no PNCP</div>
          <ul class="top-list">${p.tas.map(t => `<li><span class="nm"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.num)}</a> <span class="muted">· assinado em ${fmtD(t.ass)}${t.fim ? " · fim " + fmtD(t.fim) : ""}</span></span><b class="num">${brl(t.v)}</b></li>`).join("")}</ul>` : ""}`
-    : `<div class="doc-row">${pncpBadge(r)}<span class="muted">Nenhum contrato com o nº ${esc(r.n)} foi encontrado no PNCP.</span></div>`;
+    : r.ps === "fora"
+      ? `<div class="doc-row">${pncpBadge(r)}<span class="muted">Modalidade ${esc(r.mod || "")} anterior a ${PNCP_DESDE} (Lei 8.666/93): a publicação no PNCP não é exigida.</span></div>`
+      : `<div class="doc-row">${pncpBadge(r)}<span class="muted">Nenhum contrato com o nº ${esc(r.n)} foi encontrado no PNCP. Como a modalidade é de ${r.modAno || r.ano} (Lei 14.133/21), a publicação é obrigatória.</span></div>`;
   dlg.innerHTML = `
     <div class="dh"><div><div class="k">Contrato ${esc(r.n)} · ${esc(UN[r.un] || "unidade não identificada")}</div>
       <h3 id="fTitle">${esc(r.cr)}</h3><div class="doc-row">${vencBadge(r)}${r.vig ? pncpBadge(r) : ""}</div></div>

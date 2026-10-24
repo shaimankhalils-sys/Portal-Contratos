@@ -215,7 +215,12 @@ def main(dest):
                 mem["contrato"] = ler_documentos(base_ct)
                 lidos_pdf += 1
                 mudou = True
-            # termos aditivos
+            # termos aditivos (leituras antigas não têm o sequencial do termo: busca na lista de termos)
+            if not interrompido and any(not a.get("seqt") for a in c.get("aditivos", [])):
+                seqs = {(t.get("numeroTermoContrato") or ""): t.get("sequencialTermoContrato")
+                        for t in (baixar(f"{base_ct}/termos") or []) if isinstance(t, dict)}
+                for a in c.get("aditivos", []):
+                    a["seqt"] = a.get("seqt") or seqs.get(a.get("n"))
             for a in c.get("aditivos", []):
                 st = a.get("seqt")
                 if not st:

@@ -29,14 +29,24 @@ Planilha no Google Drive ──► rotina automática (GitHub Actions) ──►
 
 ## Minutas no Google Drive
 
-As minutas ficam na pasta **MINUTAS DE CONTRATOS** do Drive institucional, em subpastas por mês.
-Cada PDF deve ter o número do contrato no início do nome:
+As minutas ficam na pasta **MINUTAS DE CONTRATOS** do Drive institucional (pode ter subpastas por mês/ano).
+O nome do arquivo começa pelo número:
 
-- `2-670-2026.pdf` → contrato
-- `2-670-2026 - 1º Termo Aditivo.pdf` → aditivo do mesmo contrato
+- `2-435-2024.pdf` → contrato 2-435-2024
+- `1TA-2-435-2024.pdf` → 1º termo aditivo do contrato 2-435-2024
 
-O site só guarda o link; o arquivo abre apenas para quem está logado com a conta da Prefeitura.
+O índice (`data/minutas.json`) é atualizado todo dia às 7h pelo script `scripts/apps-script/minutas.gs`,
+que roda dentro da conta institucional (script.google.com). Os PDFs não saem do Drive: o site guarda só o
+link, que abre apenas para quem está logado com a conta da Prefeitura.
 
+Instalação do script (uma vez):
+
+1. Em script.google.com, logado com a conta institucional: **Novo projeto**, cole o conteúdo de `minutas.gs`.
+2. No GitHub: *Settings (do seu perfil) → Developer settings → Personal access tokens → Fine-grained tokens →
+   Generate new token*. Repository access: **Only select repositories → Portal-Contratos**.
+   Permissions → Repository permissions → **Contents: Read and write**. Copie o token.
+3. No projeto do Apps Script: **Configurações do projeto → Propriedades do script → GITHUB_TOKEN** = token.
+4. Execute `atualizarMinutas` uma vez (autorize o acesso ao Drive) e depois `instalarGatilhoDiario`.
 
 ## Configuração (uma vez só)
 

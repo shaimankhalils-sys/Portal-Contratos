@@ -351,7 +351,8 @@ function prep(r, vig) {
   r.exigePncp = (/EXTERNO/i.test(r.mod || "") ? r.ano : (r.modAno || r.ano) || 0) >= PNCP_DESDE;
   if (r.p && r.p.st === "ausente") r.p = null;  // "não encontrado" vem sem dados do PNCP
   r.ps = !PN.verificado_em ? "nv" : r.p ? r.p.st : (r.exigePncp ? "ausente" : "fora");
-  r.docs = (MIN.docs && MIN.docs[r.n]) || [];
+  // índice do Drive usa o nº sem zeros à esquerda: 2-005-2024 -> 2-5-2024
+  r.docs = (MIN.docs && (MIN.docs[r.n] || (r.un && r.seq && MIN.docs[r.un + "-" + r.seq + "-" + r.ano]))) || [];
   r.kbf = (ITX.contratos && ITX.contratos[r.n]) || null;
   r.hist = historico(r);
   r.idx = fold([r.n, r.cr, r.obj, r.mod, r.sec, r.cid].join(" "));
@@ -714,7 +715,9 @@ function renderPend(p) {
       ${soBox}
       <section class="panel"><div class="panel-h"><h2>Minutas no Drive</h2><small>${(DB.vigentes.length - p.semMin.length).toLocaleString("pt-BR")} de ${DB.vigentes.length.toLocaleString("pt-BR")} contratos com minuta</small></div>
         <div class="note"><b class="num">${p.semMin.length.toLocaleString("pt-BR")}</b> de ${DB.vigentes.length.toLocaleString("pt-BR")} contratos vigentes ainda sem <b>minuta no Drive</b>.<br><br>
-        Para incluir, salve o PDF na pasta <b>MINUTAS DE CONTRATOS</b> do Drive com o número do contrato no nome (ex.: <b>2-670-2026.pdf</b>; aditivos como <b>2-670-2026 - 1º Termo Aditivo.pdf</b>).</div></section>
+        ${(MIN.sem_contrato || []).length ? `<b class="num">${MIN.sem_contrato.length}</b> arquivo(s) no Drive com nome fora do padrão (não ligados a nenhum contrato):
+          <ul style="margin:6px 0 10px 18px;padding:0;max-height:160px;overflow:auto">${MIN.sem_contrato.slice(0, 200).map(f => `<li><a href="${DRIVE_FILE(f.id)}" target="_blank" rel="noopener">${esc(f.nome)}</a> <span class="muted">· ${esc(f.pasta || "")}</span></li>`).join("")}</ul>` : ""}
+        Para incluir, salve o PDF na pasta <b>MINUTAS DE CONTRATOS</b> do Drive com o número do contrato no nome (ex.: <b>2-670-2026.pdf</b>; termos aditivos como <b>1TA-2-670-2026.pdf</b>, <b>2TA-2-670-2026.pdf</b>…). A lista é atualizada todo dia às 7h.</div></section>
       ${(DB.avisos || []).length ? `<section class="panel"><div class="panel-h"><h2>Ajustes feitos na leitura</h2><small>a planilha não foi alterada</small></div>
         <div class="note">${DB.avisos.map(a => "• " + esc(a)).join("<br>")}<br><br>Valores em formatos diferentes e nomes de secretaria com grafias diferentes (ADM/ADMINISTRAÇÃO, INFRA/INFRAESTRUTURA, SAUDE/SAÚDE…) também foram padronizados.</div></section>` : ""}
     </div>`;
@@ -810,7 +813,7 @@ function openFicha(n) {
       <div class="sec"><h4>Minutas e documentos</h4>
         ${r.docs.length ? `<ul class="docs">${r.docs.map(d => `<li>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
-            <div class="dn"><b>${esc(d.nome)}</b><span class="muted">${esc(d.pasta || "")}${d.tam ? " · " + fmtMB(d.tam) : ""}${d.mod ? " · " + fmtD(d.mod) : ""}</span></div>
+            <div class="dn"><b>${esc(d.nome)}</b><span class="muted">${d.arquivo ? esc(d.arquivo) + " · " : ""}${esc(d.pasta || "")}${d.tam ? " · " + fmtMB(d.tam) : ""}${d.mod ? " · " + fmtD(d.mod) : ""}</span></div>
             <a class="btn primary" href="${DRIVE_FILE(d.id)}" target="_blank" rel="noopener">Abrir ↗</a></li>`).join("")}</ul>
             <div class="muted" style="margin-top:8px">Abre no Google Drive institucional, somente com a conta da Prefeitura.</div>`
           : `<div class="doc-row"><span class="muted">Nenhuma minuta deste contrato no Drive ainda.</span>${MIN.pasta_raiz ? `<a class="btn" href="${DRIVE_FOLDER(MIN.pasta_raiz)}" target="_blank" rel="noopener">Abrir pasta de minutas ↗</a>` : ""}</div>`}

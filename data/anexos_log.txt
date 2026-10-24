@@ -1,5 +1,7 @@
-[12:55:46] Contratos vigentes com endereço no PNCP: 884
-[13:35:48] Limite de tempo atingido; o restante fica para a próxima execução.
-[13:35:49] PDFs lidos agora: 778 | erros: 0 | contratos com itens do PDF: 584 | aditivos com itens: 256 | acréscimos/supressões ainda sem itens: 78
-[13:35:49]   1TA-2-221-2025 (2-221-2025): 1TA22212025__CBS__CONSTRUTORA_BAHIANA_DE_SANEAMENTO_LTDA.pdf: tabela de itens não reconhecida | trecho: ITEM ESPECIFICAÇÃO UNID QUANT VALOR UNITÁRIO 002 MICRODRENAGEM SERV 01 R$ 489.474,17 003 PAVIMENTAÇÃO SERV 01 R$ 2.402.170,67 010 PRAÇA URBIS SERV 01 R$ 11.952,32 VALOR TOTAL R$ 2.903.597,16
-[13:35:49]   1TA-3-677-2025 (4-677-2026): 1TA35782025__WELTEN_COMERCIAL_LTDA__PNCP.pdf: tabela de itens não reconhecida (sem anexo de itens)
+[15:19:48] Contratos vigentes com endereço no PNCP: 884
+[15:59:49] Limite de tempo atingido; o restante fica para a próxima execução.
+[15:59:49] PDFs lidos agora: 198 | erros: 0 | contratos com itens do PDF: 582 | aditivos com itens: 253 | acréscimos/supressões ainda sem itens: 80
+[15:59:49]   1TA-2-221-2025 (2-221-2025): 1TA22212025__CBS__CONSTRUTORA_BAHIANA_DE_SANEAMENTO_LTDA.pdf: tabela de itens não reconhecida | trecho: ITEM ESPECIFICAÇÃO UNID QUANT VALOR UNITÁRIO 002 MICRODRENAGEM SERV 01 R$ 489.474,17 003 PAVIMENTAÇÃO SERV 01 R$ 2.402.170,67 010 PRAÇA URBIS SERV 01 R$ 11.952,32 VALOR TOTAL R$ 2.903.597,16
+[15:59:49]   1TA-3-677-2025 (4-677-2026): 1TA35782025__WELTEN_COMERCIAL_LTDA__PNCP.pdf: tabela de itens não reconhecida (sem anexo de itens)
+[15:59:49]   1TA-2-313-2026 (2-313-2026): 1TA23132026__BULOKE_CONSTRUO_E_SERVICOS_LTDA.pdf: tabela de itens não reconhecida | trecho: ANEXO I - ITENS DO ADITIVO SALDO DO SALDO APÓS ITEM ESPECIFICAÇÃO SUPRESSÃO ACRÉSCIMO CONTRATO ADITIVO 01 ADMINISTRAÇÃO LOCAL R$ 101.130,71 - R$ 137.910,33 R$ 239.041,04 02 SERVIÇOS PRELIMINARES R$ 941.988,94 R$ 911.802,52 R$ 537.105,52 R$ 567.291,94 03 PAVIME
+[15:59:49]   4TA-2-270-2024 (2-270-2024): 4TA22702024__HF_SUZARTE_2.pdf: tabela de itens não reconhecida | trecho: ITEM DESCRIÇÃO VLR UNIT VLR TOTAL ABACAXI PÉROLA: DE PRIMEIRA, IN NATURA: APRESENTANDO GRAU DE MATURAÇÃO TAL QUE LHE 2 PERMITA SUPORTAR A MANIPULAÇÃO, O TRANSPORTE E A R$ 5,93 R$ 7,99 CONSERVAÇÃO EM CONDIÇÕES ADEQUADAS PARA O CONSUMO. ABOBRINHA: DE PRIMEIRA, A

@@ -676,7 +676,7 @@ function renderAdt() {
       <th class="r">Valor anterior</th><th class="r">Valor novo</th><th class="r ${f.sort === "dif" ? "sorted" : ""}" data-s="dif">Diferença<span class="ar">${f.sort === "dif" ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th>
     </tr></thead><tbody>${rows.slice(0, 300).map(a => `<tr data-open="${esc(a.r.n)}" tabindex="0">
       <td class="num">${fmtD(a.cel || a.ini)}</td>
-      <td class="cr"><div class="t1"><span class="num">${esc(a.r.n)}</span> · ${esc(a.n)}</div><div class="t2 clip">${esc(a.r.cr)} — ${esc(a.obj)}</div>${(a.itens || []).length ? `<div class="t2">${a.itens.length} item(ns) ${a.tipo === "supressao" ? "suprimido(s)" : "acrescido(s)"} — abra a ficha para ver</div>` : ""}</td>
+      <td class="cr"><div class="t1"><span class="num">${esc(a.r.n)}</span> · ${esc(a.n)}</div><div class="t2 clip">${esc(a.r.cr)} — ${esc(a.obj)}</div>${(a.itens || []).length ? `<div class="t2">${a.itens.length} item(ns) ${a.tipo === "supressao" ? "suprimido(s)" : a.tipo === "acrescimo" ? "acrescido(s)" : "no termo"} — abra a ficha para ver</div>` : ""}</td>
       <td>${tipoBadge(a.tipo)}</td>
       ${a.semValor ? `<td class="r muted" colspan="3">valor não informado no PNCP</td>` : `<td class="r num">${brl(a.ant)}</td><td class="r num">${brl(a.novo)}</td>
       <td class="r num"><b>${a.dif ? difFmt(a.dif) : "—"}</b><div class="t2">${a.dif ? pctFmt(a.pct) : ""}</div></td>`}</tr>`).join("") ||
@@ -772,18 +772,25 @@ function adtItensHtml(r, h) {
     if (!(h.tipo === "acrescimo" || h.tipo === "supressao") || !links) return "";
     return `<tr class="adt-sub"><td colspan="6"><div class="muted" style="font-size:12.5px;padding-top:2px">${h.pdf ? "Itens não identificados no PDF deste termo (pode ser digitalizado ou sem anexo de itens)." : "PDF do termo não publicado no PNCP."} ${links}</div></td></tr>`;
   }
-  const sup = h.tipo === "supressao";
-  const temQ0 = its.some(x => x.q0);
+  const sup = h.tipo === "supressao", acr = h.tipo === "acrescimo";
+  const preco = ["reajuste", "reequilibrio", "repactuacao"].includes(h.tipo);
+  const titulo = sup ? "Itens suprimidos neste termo" : acr ? "Itens acrescidos neste termo"
+    : preco ? "Itens com os preços deste termo" : h.tipo === "prazo" ? "Itens deste termo (período prorrogado)" : "Itens que constam neste termo";
+  const temQ0 = (acr || sup) && its.some(x => x.q0);
+  const temU0 = preco && its.some(x => x.u0);
   const soma = its.reduce((s, x) => s + (x.total || 0), 0);
+  const pct1 = v => (v > 0 ? "+" : "") + v.toLocaleString("pt-BR", {maximumFractionDigits: 2}) + "%";
   return `<tr class="adt-sub"><td colspan="6"><details class="adt-itens" open>
-    <summary><span>${sup ? "Itens suprimidos" : "Itens acrescidos"} neste termo · ${its.length} item(ns) · <span class="num">${brl(soma)}</span></span><span>${links}</span></summary>
-    <div class="tbl-wrap"><table class="mini"><thead><tr><th>Produto / serviço</th><th>Un.</th>${temQ0 ? '<th class="r">Qtd. contrato</th>' : ""}<th class="r">Qtd. ${sup ? "suprimida" : "acrescida"}</th>${temQ0 ? '<th class="r">%</th>' : ""}<th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
-    <tbody>${its.map(x => { const pc = x.q0 ? x.qtd / x.q0 * 100 : null;
+    <summary><span>${titulo} · ${its.length} item(ns) · <span class="num">${brl(soma)}</span></span><span>${links}</span></summary>
+    <div class="tbl-wrap"><table class="mini"><thead><tr><th>Produto / serviço</th><th>Un.</th>${temQ0 ? '<th class="r">Qtd. contrato</th>' : ""}<th class="r">Qtd.${acr ? " acrescida" : sup ? " suprimida" : ""}</th>${temQ0 ? '<th class="r" title="Valor acrescido/suprimido sobre o valor original do item no contrato">% do item</th>' : ""}${temU0 ? '<th class="r">Preço no contrato</th>' : ""}<th class="r">Preço unit.${temU0 ? " novo" : ""}</th>${temU0 ? '<th class="r">Variação</th>' : ""}<th class="r">Total</th></tr></thead>
+    <tbody>${its.map(x => { const pc = x.q0 && x.u0 ? x.total / (x.q0 * x.u0) * 100 : x.q0 ? x.qtd / x.q0 * 100 : null;  // % sobre o valor do item no contrato const alerta = acr && pc > 25.005;
+      const vu = x.u0 ? (x.unit - x.u0) / x.u0 * 100 : null;
       return `<tr><td><div class="clip" title="${esc(x.prod)}">${esc(x.prod)}</div></td><td class="muted">${esc(x.un || "")}</td>
-      ${temQ0 ? `<td class="r num muted">${qtdFmt(x.q0)}</td>` : ""}<td class="r num"><b>${sup ? "−" : "+"}${qtdFmt(x.qtd)}</b></td>
-      ${temQ0 ? `<td class="r num${pc > 25.005 && !sup ? " pct-alerta" : ""}"${pc > 25.005 && !sup ? ' title="Acima de 25% da quantidade do contrato (art. 125 da Lei 14.133/21) — confira se há justificativa."' : ""}>${pc == null ? "—" : pc.toLocaleString("pt-BR", {maximumFractionDigits: 1}) + "%"}</td>` : ""}
-      <td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`; }).join("")}</tbody></table></div>
-    ${h.dif && Math.abs(Math.abs(h.dif) - soma) > Math.max(1, soma * 0.01) && !h.semValor ? `<div class="muted" style="font-size:12px;padding:6px 12px">A soma dos itens (${brl(soma)}) difere do valor do termo no PNCP (${difFmt(h.dif)}).</div>` : ""}
+      ${temQ0 ? `<td class="r num muted">${qtdFmt(x.q0)}</td>` : ""}<td class="r num">${acr || sup ? `<b>${sup ? "−" : "+"}${qtdFmt(x.qtd)}</b>` : qtdFmt(x.qtd)}</td>
+      ${temQ0 ? `<td class="r num${alerta ? " pct-alerta" : ""}"${alerta ? ' title="Acima de 25% do valor original do item (art. 125 da Lei 14.133/21) — confira se há justificativa."' : ""}>${pc == null ? "—" : pc.toLocaleString("pt-BR", {maximumFractionDigits: 1}) + "%"}</td>` : ""}
+      ${temU0 ? `<td class="r num muted">${x.u0 ? brl(x.u0) : "—"}</td>` : ""}<td class="r num">${temU0 ? `<b>${brl(x.unit)}</b>` : brl(x.unit)}</td>
+      ${temU0 ? `<td class="r num">${vu == null || Math.abs(vu) < 0.005 ? "—" : pct1(vu)}</td>` : ""}<td class="r num">${brl(x.total)}</td></tr>`; }).join("")}</tbody></table></div>
+    ${(acr || sup) && h.dif && Math.abs(Math.abs(h.dif) - soma) > Math.max(1, soma * 0.01) && !h.semValor ? `<div class="muted" style="font-size:12px;padding:6px 12px">A soma dos itens (${brl(soma)}) difere do valor do termo no PNCP (${difFmt(h.dif)}).</div>` : ""}
   </details></td></tr>`;
 }
 

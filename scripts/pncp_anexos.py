@@ -18,7 +18,7 @@ import sys, os, re, io, json, time, unicodedata, datetime as dt
 import urllib.request, urllib.parse, urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from anexo_itens import ler_anexo, ler_tabelas  # noqa: E402
+from anexo_itens import ler_anexo, ler_tabelas, recorta, filtra_tabelas  # noqa: E402
 
 API = "https://pncp.gov.br/api/pncp/v1/orgaos"
 CNPJ = "13650403000128"
@@ -26,7 +26,8 @@ PASTA = "data/pncp_anexos"
 PASTA_ITENS = "data/itens"
 LIMITE_MINUTOS = 40
 MAX_BYTES = 25 * 1024 * 1024
-RELER_SEM_PDF_DIAS = 7      # contrato/termo sem PDF publicado: procura de novo depois desse prazo
+RELER_SEM_PDF_DIAS = 7
+VERSAO = 2                  # versão do leitor; ao mudar, as tabelas guardadas são relidas      # contrato/termo sem PDF publicado: procura de novo depois desse prazo
 
 INICIO = time.time()
 LOG = []
@@ -92,12 +93,18 @@ def texto_pdf(dados, tabelas=None):
     return "\n".join(partes)
 
 
-def melhor_leitura(dados):
-    """Compara a leitura pelas células da tabela e pelo texto; fica com a que confere com o total."""
-    tabs = []
-    txt = texto_pdf(dados, tabs)
-    por_texto, total = ler_anexo(txt)
-    por_tabela = ler_tabelas(tabs)
+def melhor_leitura(dados=None, anexo=None, tabs=None):
+    """Compara a leitura pelas células da tabela e pelo texto; fica com a que confere com o total.
+    Aceita o PDF (dados) ou o trecho já guardado (anexo + tabs)."""
+    if dados is not None:
+        tabs = []
+        txt = texto_pdf(dados, tabs)
+        tabs = filtra_tabelas(tabs)
+        anexo = recorta(txt)
+    else:
+        txt = anexo or ""
+    por_texto, total = ler_anexo(anexo or "")
+    por_tabela = ler_tabelas(tabs or [])
     def nota(its):
         if not its:
             return -1
@@ -106,7 +113,7 @@ def melhor_leitura(dados):
         ok_q = sum(1 for x in its if x["qtd"] and x["unit"] and abs(x["qtd"] * x["unit"] - x["total"]) <= max(0.05, x["total"] * 0.005))
         return ok_total + ok_q / len(its)
     its = por_tabela if nota(por_tabela) >= nota(por_texto) and por_tabela else por_texto
-    return txt, its, total
+    return txt, its, total, anexo, tabs
 
 
 def documentos(base):
@@ -140,13 +147,16 @@ def ler_documentos(base):
             tentativas.append(f"{titulo or url}: não é PDF ou muito grande")
             continue
         try:
-            txt, itens, total = melhor_leitura(dados)
+            txt, itens, total, anexo, tabs = melhor_leitura(dados)
         except Exception as e:
             tentativas.append(f"{titulo}: erro ao ler PDF ({type(e).__name__})")
             continue
-        if itens:
-            return {"st": "ok", "lido": hoje_iso(), "pdf": url, "titulo": titulo,
-                    "itens": itens, "total_doc": total}
+        if itens or anexo:  # guarda o trecho da tabela (sem o restante do documento) para reler sem baixar
+            reg = {"st": "ok" if itens else "sem_itens", "lido": hoje_iso(), "v": VERSAO, "pdf": url, "titulo": titulo,
+                   "itens": itens, "total_doc": total, "anexo": anexo[:60000], "tabs": tabs[:20]}
+            if not itens:
+                reg["obs"] = [f"{titulo}: tabela de itens não reconhecida | trecho: {re.sub(chr(10), ' ', anexo[:260])}"]
+            return reg
         if len(txt.strip()) < 200:
             tentativas.append(f"{titulo}: PDF sem texto (digitalizado)")
         else:
@@ -154,7 +164,24 @@ def ler_documentos(base):
             trecho = re.sub(r"\s+", " ", txt[m.start():m.start() + 260]) if m else ""
             tentativas.append(f"{titulo}: tabela de itens não reconhecida" +
                               (f" | trecho: {trecho}" if m else " (sem anexo de itens)"))
-    return {"st": "sem_itens", "lido": hoje_iso(), "pdf": docs[0][1], "obs": tentativas[:3]}
+    return {"st": "sem_itens", "lido": hoje_iso(), "v": VERSAO, "pdf": docs[0][1], "obs": tentativas[:3]}
+
+
+def precisa_ler(reg):
+    """None = nada a fazer; 'reler' = reprocessar o trecho guardado; 'baixar' = baixar o PDF."""
+    if not reg:
+        return "baixar"
+    if reg.get("v", 1) < VERSAO:
+        return "reler" if reg.get("anexo") else "baixar"
+    if reg["st"] != "ok" and velho(reg, RELER_SEM_PDF_DIAS):
+        return "baixar"
+    return None
+
+
+def reler(reg):
+    _, itens, total, _, _ = melhor_leitura(anexo=reg.get("anexo"), tabs=reg.get("tabs"))
+    reg.update({"st": "ok" if itens else "sem_itens", "v": VERSAO, "itens": itens, "total_doc": total})
+    return reg
 
 
 def hoje_iso():
@@ -209,7 +236,10 @@ def main(dest):
         try:
             # contrato
             reg = mem.get("contrato")
-            if not interrompido and (not reg or (reg["st"] != "ok" and velho(reg, RELER_SEM_PDF_DIAS))):
+            acao = precisa_ler(reg)
+            if acao == "reler":
+                mem["contrato"] = reler(reg); mudou = True
+            elif acao and not interrompido:
                 if not tempo_ok():
                     raise TimeoutError
                 mem["contrato"] = ler_documentos(base_ct)
@@ -226,7 +256,10 @@ def main(dest):
                 if not st:
                     continue
                 reg = mem["termos"].get(str(st))
-                if not interrompido and (not reg or (reg["st"] != "ok" and velho(reg, RELER_SEM_PDF_DIAS))):
+                acao = precisa_ler(reg)
+                if acao == "reler":
+                    mem["termos"][str(st)] = reler(reg); mudou = True
+                elif acao and not interrompido:
                     if not tempo_ok():
                         raise TimeoutError
                     mem["termos"][str(st)] = ler_documentos(f"{base_ct}/termos/{st}")
@@ -270,7 +303,7 @@ def main(dest):
                 for x in reg["itens"]:
                     o = casa_item(x, itens_atuais)
                     its.append({"prod": x["prod"], "un": x["un"], "qtd": x["qtd"], "unit": x["unit"], "total": x["total"],
-                                "q0": o.get("qtd") if o else None})
+                                "q0": o.get("qtd") if o else None, "u0": o.get("unit") if o else None})
                 a["itens"] = its
                 a["ti"] = round(sum(x["total"] or 0 for x in its), 2)
                 com_itens_ad += 1

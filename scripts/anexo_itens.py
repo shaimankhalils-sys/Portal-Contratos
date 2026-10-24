@@ -19,7 +19,7 @@ pela extração de texto (ex.: "75 0" -> 750).
 import re
 
 UNIDADES = {
-    "UND", "UN", "UNID", "UNIDADE", "UNIDADES", "U", "M²", "M2", "M³", "M3", "M", "MT", "MTS", "METRO", "METROS", "KM",
+    "UND", "UN", "UNI", "UNID", "UNIDADE", "UNIDADES", "U", "M²", "M2", "M³", "M3", "M", "MT", "MTS", "METRO", "METROS", "KM",
     "KG", "G", "GR", "MG", "TON", "T", "L", "LT", "LTS", "LITRO", "LITROS", "ML", "GL", "GALÃO", "GALAO",
     "CX", "CAIXA", "PCT", "PACOTE", "PC", "PÇ", "PÇA", "PCA", "PEÇA", "PECA", "FR", "FRASCO", "FRS", "AMP", "AMPOLA",
     "CP", "COMP", "CPR", "COMPRIMIDO", "CAPS", "CÁPSULA", "RESMA", "RM", "ROLO", "RL", "PAR", "PARES", "JG", "JOGO",
@@ -29,7 +29,7 @@ UNIDADES = {
     "BOMBONA", "CARTELA", "CT", "ANO", "SEMANA", "EVENTO", "DIÁRIAS", "VB", "VERBA", "LOTE", "M²/MÊS", "UNID.", "UND.",
 }
 
-LINHA_VALOR = re.compile(r"^(?P<antes>.*?)\s*R\$\s*(?P<unit>\d[\d.]*,\d{2,4})\s+R\$\s*(?P<total>\d[\d.]*,\d{2})\s*$")
+LINHA_VALOR = re.compile(r"^(?P<antes>.*?)\s*R\$\s*(?P<unit>\d[\d.]*(?:,\d{1,4})?)\s+R\$\s*(?P<total>\d[\d.]*(?:,\d{1,2})?)\s*$")
 CODIGO = re.compile(r"^\s*(?:\d{1,3}\s+)?(?P<cod>\d{7,12})\s*(?:[-–—:]\s*|\s+(?=[A-ZÀ-Ú]))")
 FIM = re.compile(r"^\s*(VALOR\s+TOTAL|TOTAL\s+GERAL|TOTAL\s*:)", re.I)
 INICIO = re.compile(r"ITENS\s+D[OA]\s+(CONTRATO|ADITIVO|TERMO)|^ITEM\s+(DESCRI|ESPECIF|PRODUTO)", re.I)
@@ -82,13 +82,39 @@ def _separa_quantidade(tokens, unit, total):
     return len(tokens), (total / unit if unit else None)
 
 
-def ler_anexo(texto):
-    """Devolve (itens, valor_total_declarado). Lista vazia se não houver tabela reconhecível."""
+def confere(x):
+    q, u, t = x.get("qtd"), x.get("unit"), x.get("total")
+    return bool(q and u and t and abs(q * u - t) <= max(0.06, t * 0.006))
+
+
+def valida(itens):
+    """Mantém só itens em que quantidade × unitário = total. Se a maioria não confere, a tabela
+    não é de itens (ex.: planilha de medição de obra) e a leitura é descartada."""
+    bons = [x for x in itens if confere(x)]
+    return bons if itens and len(bons) >= 0.6 * len(itens) else []
+
+
+def recorta(texto):
+    """Trecho do texto com a tabela de itens (do título/cabeçalho até o VALOR TOTAL), ou ''."""
     linhas = [normaliza(l) for l in texto.splitlines()]
     linhas = [l for l in linhas if l]
-    ini = next((i for i, l in enumerate(linhas) if INICIO.search(l)), None)
-    if ini is None:
+    for ini, l in enumerate(linhas):
+        if not INICIO.search(l):
+            continue
+        prox = linhas[ini:ini + 12]
+        if not any(CABECALHO.search(x) or LINHA_VALOR.match(x) for x in prox):
+            continue
+        fim = next((j for j in range(ini + 1, len(linhas)) if FIM.match(linhas[j])), min(len(linhas), ini + 400) - 1)
+        return "\n".join(linhas[ini:fim + 1])
+    return ""
+
+
+def ler_anexo(texto):
+    """Devolve (itens, valor_total_declarado). Lista vazia se não houver tabela reconhecível."""
+    linhas = [l for l in recorta(texto).splitlines() if l]
+    if not linhas:
         return [], None
+    ini = 0
     corpo, total_doc = [], None
     for l in linhas[ini + 1:]:
         if FIM.match(l):
@@ -100,7 +126,7 @@ def ler_anexo(texto):
         corpo.append(l)
 
     # localiza as linhas de valores
-    idx = [i for i, l in enumerate(corpo) if LINHA_VALOR.match(l)]
+    idx = [i for i, l in enumerate(corpo) if LINHA_VALOR.match(l) and "R$" not in LINHA_VALOR.match(l).group("antes")]
     if not idx:
         return [], total_doc
     tem_codigo = any(CODIGO.match(l) for l in corpo)
@@ -155,7 +181,7 @@ def ler_anexo(texto):
             "unit": unit,
             "total": total,
         })
-    return itens, total_doc
+    return valida(itens), total_doc
 
 
 def _col(cab, *padroes):
@@ -201,7 +227,22 @@ def ler_tabelas(tabelas):
             itens.append({"n": int(n) if n and len(n) <= 4 else len(itens) + 1, "cod": cod.group("cod") if cod else "",
                           "prod": desc[:700], "un": g("un").upper().rstrip("."), "marca": g("marca"),
                           "qtd": qtd, "unit": unit, "total": total})
-    return itens
+    return valida(itens)
+
+
+def filtra_tabelas(tabelas):
+    """Guarda só as linhas que interessam (cabeçalho de itens e linhas com valores), para reler depois sem baixar o PDF."""
+    out = []
+    for tab in tabelas:
+        linhas = []
+        for linha in tab:
+            cel = [re.sub(r"\s+", " ", c or "").strip() for c in linha]
+            txt = " ".join(cel).upper()
+            if ("DESCRI" in txt or "ESPECIFICA" in txt or "PRODUTO" in txt) and "TOTAL" in txt or re.search(r"\d,\d{2}", txt):
+                linhas.append(cel)
+        if linhas:
+            out.append(linhas)
+    return out
 
 
 if __name__ == "__main__":

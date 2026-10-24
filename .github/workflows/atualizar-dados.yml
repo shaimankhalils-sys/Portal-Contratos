@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Instalar dependências
-        run: pip install openpyxl==3.1.5
+        run: pip install openpyxl==3.1.5 pdfplumber==0.11.4
 
       - name: Baixar planilha do Google Drive
         env:
@@ -49,6 +49,11 @@ jobs:
         continue-on-error: true
         timeout-minutes: 55
         run: python -u scripts/pncp_itens.py data/contratos.json data/pncp.json data/itens.json
+
+      - name: Itens nos PDFs do contrato e dos aditivos (PNCP)
+        continue-on-error: true
+        timeout-minutes: 45
+        run: python -u scripts/pncp_anexos.py data/itens.json
 
       - name: Publicar se houve mudança
         run: |

@@ -25,6 +25,9 @@ Planilha no Google Drive ──► rotina automática (GitHub Actions) ──►
 | `data/minutas.json` | Índice das minutas no Drive institucional (nome, ID e data de cada PDF) |
 | `scripts/build_data.py` | Lê a planilha e gera `contratos.json` |
 | `scripts/pncp_sync.py` | Consulta o PNCP e gera `pncp.json` |
+| `scripts/pncp_itens.py` | Itens (da contratação de origem) e termos aditivos de cada contrato → `data/itens.json`, `data/itens/` |
+| `scripts/pncp_anexos.py` | Lê o "ANEXO I – ITENS" dos PDFs do contrato e de cada termo aditivo no PNCP (itens acrescidos/suprimidos). Os PDFs não ficam no repositório; só os itens lidos (`data/pncp_anexos/`). Relatório em `data/anexos_log.txt` |
+| `scripts/anexo_itens.py` | Leitor da tabela de itens (usado por `pncp_anexos.py`) |
 | `.github/workflows/atualizar-dados.yml` | A rotina automática |
 
 ## Minutas no Google Drive

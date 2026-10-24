@@ -210,6 +210,17 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 table.mini th{cursor:default}
 table.mini td,table.mini th{padding:7px 10px;font-size:13px}
 table.mini tfoot td{border-bottom:0;border-top:2px solid var(--line)}
+tr.adt-sub>td{padding:0 10px 12px;background:var(--surface-2)}
+.adt-itens{border:1px solid var(--line);border-radius:8px;background:var(--surface);margin-top:2px}
+.adt-itens summary{cursor:pointer;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2);list-style:none;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.adt-itens summary::-webkit-details-marker{display:none}
+.adt-itens summary::before{content:"▸";margin-right:6px;color:var(--ink-3)}
+.adt-itens[open] summary::before{content:"▾"}
+.adt-itens summary>span:first-child{flex:1;min-width:0}
+.adt-itens table.mini{border-top:1px solid var(--line)}
+.adt-itens table.mini td,.adt-itens table.mini th{font-size:12.5px;padding:6px 10px}
+.adt-itens .lnk{font-weight:500;font-size:12px}
+.pct-alerta{color:var(--red);font-weight:600}
 .mini-doc{display:inline-flex;vertical-align:-2px;margin-left:6px;color:var(--ink-3)}
 .muted{color:var(--ink-3);font-size:12.5px}
 .df{padding:12px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;position:sticky;bottom:0;background:var(--surface)}
@@ -640,7 +651,7 @@ function renderAdt() {
   const all = todosAditivos();
   const terms = fold(f.q).split(/\s+/).filter(Boolean);
   const rows = all.filter(a => (!f.tipo || a.tipo === f.tipo) && (!f.sec || a.r.sec === f.sec) &&
-      terms.every(t => fold([a.r.n, a.r.cr, a.n, a.obj].join(" ")).includes(t)))
+      terms.every(t => fold([a.r.n, a.r.cr, a.n, a.obj, ...(a.itens || []).map(x => x.prod)].join(" ")).includes(t)))
     .sort((a, b) => (f.sort === "dif" ? (a.dif - b.dif) : String(a.cel || "").localeCompare(String(b.cel || ""))) * f.dir);
   current = rows.map(a => a.r);
   const soma = t => all.filter(a => a.tipo === t).reduce((s, a) => s + a.dif, 0);
@@ -665,7 +676,7 @@ function renderAdt() {
       <th class="r">Valor anterior</th><th class="r">Valor novo</th><th class="r ${f.sort === "dif" ? "sorted" : ""}" data-s="dif">Diferença<span class="ar">${f.sort === "dif" ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th>
     </tr></thead><tbody>${rows.slice(0, 300).map(a => `<tr data-open="${esc(a.r.n)}" tabindex="0">
       <td class="num">${fmtD(a.cel || a.ini)}</td>
-      <td class="cr"><div class="t1"><span class="num">${esc(a.r.n)}</span> · ${esc(a.n)}</div><div class="t2 clip">${esc(a.r.cr)} — ${esc(a.obj)}</div></td>
+      <td class="cr"><div class="t1"><span class="num">${esc(a.r.n)}</span> · ${esc(a.n)}</div><div class="t2 clip">${esc(a.r.cr)} — ${esc(a.obj)}</div>${(a.itens || []).length ? `<div class="t2">${a.itens.length} item(ns) ${a.tipo === "supressao" ? "suprimido(s)" : "acrescido(s)"} — abra a ficha para ver</div>` : ""}</td>
       <td>${tipoBadge(a.tipo)}</td>
       ${a.semValor ? `<td class="r muted" colspan="3">valor não informado no PNCP</td>` : `<td class="r num">${brl(a.ant)}</td><td class="r num">${brl(a.novo)}</td>
       <td class="r num"><b>${a.dif ? difFmt(a.dif) : "—"}</b><div class="t2">${a.dif ? pctFmt(a.pct) : ""}</div></td>`}</tr>`).join("") ||
@@ -738,13 +749,42 @@ async function carregarItens(r) {
   const linha = (x, i) => `<tr${muitos && i >= LIM ? ' class="mais" hidden' : ""}><td class="num muted">${i + 1}</td><td><div class="clip" title="${esc(x.prod)}">${esc(x.prod)}</div>${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
     <td class="muted">${esc(x.un || "")}</td><td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
   const srp = r.kbf && r.kbf.srp;
-  box.innerHTML = `${r.kbf && r.kbf.fonte === "PNCP" ? `<div class="muted" style="margin-bottom:8px">Itens vencidos por este fornecedor na contratação de origem${r.kbf.compra_num ? ` (nº ${esc(r.kbf.compra_num)})` : ""}, segundo o PNCP.${srp ? " <b>Registro de preços:</b> a quantidade é a homologada na ata e pode ser maior que a deste contrato." : ""}</div>` : ""}
+  const doPdf = r.kbf && r.kbf.fonte_itens === "PDF do contrato";
+  box.innerHTML = `${doPdf ? `<div class="muted" style="margin-bottom:8px">Itens conforme o Anexo I do contrato publicado no PNCP${r.kbf.pdf ? ` · <a href="${esc(r.kbf.pdf)}" target="_blank" rel="noopener">abrir PDF ↗</a>` : ""}. Itens acrescidos ou suprimidos por aditivo aparecem na seção “Aditivos”.</div>`
+    : r.kbf && r.kbf.fonte === "PNCP" ? `<div class="muted" style="margin-bottom:8px">Itens vencidos por este fornecedor na contratação de origem${r.kbf.compra_num ? ` (nº ${esc(r.kbf.compra_num)})` : ""}, segundo o PNCP.${srp ? " <b>Registro de preços:</b> a quantidade é a homologada na ata e pode ser maior que a deste contrato." : ""}</div>` : ""}
     <div class="tbl-wrap"><table class="mini"><thead><tr><th>#</th><th>Produto / serviço</th><th>Un.</th><th class="r">Qtd.</th><th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
     <tbody>${itens.map(linha).join("")}</tbody>
     <tfoot><tr><td></td><td><b>${itens.length} item(ns)</b></td><td></td><td></td><td></td><td class="r num"><b>${brl(total)}</b></td></tr></tfoot></table></div>
     ${muitos ? `<button class="btn" id="maisItens" type="button" style="margin-top:8px">Mostrar todos os ${itens.length} itens</button>` : ""}
     ${r.v && Math.abs(total - r.v) > Math.max(1, r.v * 0.01) ? `<div class="muted" style="margin-top:6px">A soma dos itens (${brl(total)}) difere do valor da planilha (${brl(r.v)}).</div>` : ""}`;
   const b = $("#maisItens"); if (b) b.onclick = () => { box.querySelectorAll("tr.mais").forEach(t => t.hidden = false); b.remove(); };
+}
+
+/* ---------- itens de cada aditivo (lidos do PDF do termo no PNCP) ---------- */
+const nTermo = h => { const m = String(h.n || "").match(/^\s*(\d{1,2})\s*[ºo°]?\s*(?:TA|termo)/i); return m ? +m[1] : null; };
+const qtdFmt = q => q == null ? "—" : Number(q).toLocaleString("pt-BR", {maximumFractionDigits: 3});
+function adtItensHtml(r, h) {
+  const its = h.itens || [];
+  const minuta = r.docs.find(d => d.ordem && d.ordem === nTermo(h));
+  const links = [h.pdf ? `<a class="lnk" href="${esc(h.pdf)}" target="_blank" rel="noopener">PDF do termo no PNCP ↗</a>` : "",
+                 minuta ? `<a class="lnk" href="${DRIVE_FILE(minuta.id)}" target="_blank" rel="noopener">Minuta no Drive ↗</a>` : ""].filter(Boolean).join(" · ");
+  if (!its.length) {
+    if (!(h.tipo === "acrescimo" || h.tipo === "supressao") || !links) return "";
+    return `<tr class="adt-sub"><td colspan="6"><div class="muted" style="font-size:12.5px;padding-top:2px">${h.pdf ? "Itens não identificados no PDF deste termo (pode ser digitalizado ou sem anexo de itens)." : "PDF do termo não publicado no PNCP."} ${links}</div></td></tr>`;
+  }
+  const sup = h.tipo === "supressao";
+  const temQ0 = its.some(x => x.q0);
+  const soma = its.reduce((s, x) => s + (x.total || 0), 0);
+  return `<tr class="adt-sub"><td colspan="6"><details class="adt-itens" open>
+    <summary><span>${sup ? "Itens suprimidos" : "Itens acrescidos"} neste termo · ${its.length} item(ns) · <span class="num">${brl(soma)}</span></span><span>${links}</span></summary>
+    <div class="tbl-wrap"><table class="mini"><thead><tr><th>Produto / serviço</th><th>Un.</th>${temQ0 ? '<th class="r">Qtd. contrato</th>' : ""}<th class="r">Qtd. ${sup ? "suprimida" : "acrescida"}</th>${temQ0 ? '<th class="r">%</th>' : ""}<th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
+    <tbody>${its.map(x => { const pc = x.q0 ? x.qtd / x.q0 * 100 : null;
+      return `<tr><td><div class="clip" title="${esc(x.prod)}">${esc(x.prod)}</div></td><td class="muted">${esc(x.un || "")}</td>
+      ${temQ0 ? `<td class="r num muted">${qtdFmt(x.q0)}</td>` : ""}<td class="r num"><b>${sup ? "−" : "+"}${qtdFmt(x.qtd)}</b></td>
+      ${temQ0 ? `<td class="r num${pc > 25.005 && !sup ? " pct-alerta" : ""}"${pc > 25.005 && !sup ? ' title="Acima de 25% da quantidade do contrato (art. 125 da Lei 14.133/21) — confira se há justificativa."' : ""}>${pc == null ? "—" : pc.toLocaleString("pt-BR", {maximumFractionDigits: 1}) + "%"}</td>` : ""}
+      <td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`; }).join("")}</tbody></table></div>
+    ${h.dif && Math.abs(Math.abs(h.dif) - soma) > Math.max(1, soma * 0.01) && !h.semValor ? `<div class="muted" style="font-size:12px;padding:6px 12px">A soma dos itens (${brl(soma)}) difere do valor do termo no PNCP (${difFmt(h.dif)}).</div>` : ""}
+  </details></td></tr>`;
 }
 
 /* ---------- ficha ---------- */
@@ -794,7 +834,7 @@ function openFicha(n) {
         <thead><tr><th>Termo</th><th>Tipo</th><th>Data</th><th class="r">Anterior</th><th class="r">Novo</th><th class="r">Diferença</th></tr></thead>
         <tbody>${r.hist.map(h => `<tr><td><b class="num">${esc(h.n)}</b>${h.comoTotal ? ' <span class="muted" title="No PNCP este termo foi lançado com o valor total do contrato; a diferença foi calculada.">(lançado como total)</span>' : ""}<div class="t2 clip">${esc(h.obj)}</div></td><td>${tipoBadge(h.tipo)}</td>
           <td class="num">${fmtD(h.cel || h.ini)}${h.fim ? `<div class="t2">até ${fmtD(h.fim)}</div>` : ""}</td>
-          ${h.semValor ? `<td class="r muted" colspan="3">valor não informado no PNCP</td>` : `<td class="r num">${brl(h.ant)}</td><td class="r num">${brl(h.novo)}</td><td class="r num"><b>${h.dif ? difFmt(h.dif) : "—"}</b><div class="t2">${h.dif ? pctFmt(h.pct) : ""}</div></td>`}</tr>`).join("")}</tbody></table></div>
+          ${h.semValor ? `<td class="r muted" colspan="3">valor não informado no PNCP</td>` : `<td class="r num">${brl(h.ant)}</td><td class="r num">${brl(h.novo)}</td><td class="r num"><b>${h.dif ? difFmt(h.dif) : "—"}</b><div class="t2">${h.dif ? pctFmt(h.pct) : ""}</div></td>`}</tr>${adtItensHtml(r, h)}`).join("")}</tbody></table></div>
         <div class="muted" style="margin-top:6px">Fonte: ${r.kbf.fonte === "PNCP" ? `PNCP (termos do contrato), lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. O tipo de cada termo segue a qualificação informada no PNCP.` : `Portal da Transparência, lido em ${fmtD((r.kbf.lido || "").slice(0,10))}. Termos cancelados não entram na conta.`}</div></div>` : ""}
       <div class="sec"><h4>Itens do contrato</h4><div id="itensBox">${
         !r.kbf ? `<span class="muted">${!ITX.atualizado_em ? "Os itens são lidos do PNCP pela rotina automática e aparecem aqui após a primeira leitura."

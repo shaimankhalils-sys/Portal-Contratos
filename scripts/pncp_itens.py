@@ -176,6 +176,7 @@ def ler_termos(cnpj, ano, seq):
     for t in termos:
         out.append({
             "n": t.get("numeroTermoContrato") or f"{t.get('sequencialTermoContrato')}º termo",
+            "seqt": t.get("sequencialTermoContrato"),
             "cel": (t.get("dataAssinatura") or "")[:10] or None,
             "ini": (t.get("dataVigenciaInicio") or "")[:10] or None,
             "fim": (t.get("dataVigenciaFim") or "")[:10] or None,
@@ -257,6 +258,10 @@ def main(src_contratos, src_pncp, dest):
     # aplica a regra de valores também aos termos já guardados
     for c in contratos.values():
         c["aditivos"] = [normaliza_termo(a) for a in c.get("aditivos", [])]
+    for r in base["vigentes"]:  # endereço do contrato no PNCP (usado na leitura dos PDFs)
+        p = pncp.get("contratos", {}).get(r["n"])
+        if r["n"] in contratos and p and p.get("seq"):
+            contratos[r["n"]]["pncp_ano"], contratos[r["n"]]["pncp_seq"] = p.get("ano"), p.get("seq")
 
     # remove contratos que deixaram de ser vigentes
     vig = {r["n"] for r in base["vigentes"]}

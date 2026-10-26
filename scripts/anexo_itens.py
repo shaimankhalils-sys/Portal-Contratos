@@ -30,7 +30,7 @@ UNIDADES = {
 }
 
 LINHA_VALOR = re.compile(r"^(?P<antes>.*?)\s*R\$\s*(?P<unit>\d[\d.]*(?:,\d{1,4})?)\s+R\$\s*(?P<total>\d[\d.]*(?:,\d{1,2})?)\s*$")
-CODIGO = re.compile(r"^\s*(?:\d{1,3}\s+)?(?P<cod>\d{7,12})\s*(?:[-–—:]\s*|\s+(?=[A-ZÀ-Ú]))")
+CODIGO = re.compile(r"^\s*(?:\d{1,3}\s+)?(?P<cod>\d{5,12})\s*(?:[-–—:]\s*|\s+(?=[A-ZÀ-Ú]{2}))")
 FIM = re.compile(r"^\s*(VALOR\s+TOTAL|TOTAL\s+GERAL|TOTAL\s*:)", re.I)
 INICIO = re.compile(r"ITENS\s+D[OA]\s+(CONTRATO|ADITIVO|TERMO)|^ITEM\s+(DESCRI|ESPECIF|PRODUTO)", re.I)
 CABECALHO = re.compile(r"^ITEM\s+(DESCRI|ESPECIF|PRODUTO)|\bVLR\.?\s*UNIT|\bVALOR\s+UN", re.I)

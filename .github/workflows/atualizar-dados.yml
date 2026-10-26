@@ -55,6 +55,10 @@ jobs:
         timeout-minutes: 45
         run: python -u scripts/pncp_anexos.py data/itens.json
 
+      - name: Índice de itens para a pesquisa do site
+        continue-on-error: true
+        run: python -u scripts/indice_itens.py data/itens.json data/busca_itens.json
+
       - name: Publicar se houve mudança
         run: |
           rm -f planilha.xlsx

@@ -27,7 +27,7 @@ PASTA_ITENS = "data/itens"
 LIMITE_MINUTOS = 40
 MAX_BYTES = 25 * 1024 * 1024
 RELER_SEM_PDF_DIAS = 7
-VERSAO = 2                  # versão do leitor; ao mudar, as tabelas guardadas são relidas      # contrato/termo sem PDF publicado: procura de novo depois desse prazo
+VERSAO = 3                  # versão do leitor; ao mudar, as tabelas guardadas são relidas      # contrato/termo sem PDF publicado: procura de novo depois desse prazo
 
 INICIO = time.time()
 LOG = []

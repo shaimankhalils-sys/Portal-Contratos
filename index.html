@@ -157,6 +157,9 @@ td .t1{font-weight:600}
 td .t2{color:var(--ink-3);font-size:12.5px}
 .cr{max-width:280px}
 .ob{max-width:340px;color:var(--ink-2)}
+.hit{margin-top:4px;font-size:12px;color:var(--ink-2);background:var(--surface-2);border-radius:6px;padding:3px 8px;display:inline-block;max-width:100%}
+mark{background:#fde68a;color:#111;border-radius:2px;padding:0 1px}
+tr.item-hit>td{background:rgba(253,230,138,.18)}
 .clip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .badge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
 .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
@@ -315,6 +318,41 @@ const PAGE = 50;
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fold = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+let BUSCA_OK = false;
+// pesquisa: cada palavra pode estar nos dados do contrato (nº, credor, objeto…) ou nos itens
+// as palavras que não estão nos dados do contrato precisam estar todas no MESMO item
+function casaBusca(r, terms) {
+  const resto = terms.filter(t => !r.idx.includes(t));
+  if (!resto.length) return true;
+  if (!r.itx || !resto.every(t => r.itx.includes(t))) return false;
+  return r.itsF.some(x => resto.every(t => x.includes(t)));
+}
+// itens que explicam o resultado: os que contêm as palavras que não estão nos dados do contrato
+function itensAchados(r, terms) {
+  if (!r.its || !terms.length) return [];
+  const resto = terms.filter(t => !r.idx.includes(t));
+  if (!resto.length) return [];
+  const todos = r.its.filter((x, i) => resto.every(t => r.itsF[i].includes(t)));
+  return todos.length ? todos : r.its.filter((x, i) => resto.some(t => r.itsF[i].includes(t)));
+}
+// destaca as palavras pesquisadas num texto (ignorando acentos)
+function marca(texto, terms) {
+  const t = String(texto ?? ""), f = fold(t);
+  const faixas = [];
+  for (const w of terms) { let i = 0; while (w && (i = f.indexOf(w, i)) >= 0) { faixas.push([i, i + w.length]); i += w.length; } }
+  if (!faixas.length) return esc(t);
+  faixas.sort((a, b) => a[0] - b[0]);
+  let out = "", pos = 0;
+  for (const [a, b] of faixas) { if (a < pos) continue; out += esc(t.slice(pos, a)) + "<mark>" + esc(t.slice(a, b)) + "</mark>"; pos = b; }
+  return out + esc(t.slice(pos));
+}
+// trecho do item em volta da 1ª palavra encontrada
+function trecho(texto, terms, tam = 110) {
+  const f = fold(texto); let i = Math.min(...terms.map(w => { const k = f.indexOf(w); return k < 0 ? Infinity : k; }));
+  if (!isFinite(i) || i < 40) return texto.length > tam ? texto.slice(0, tam) + "…" : texto;
+  const ini = Math.max(0, i - 35);
+  return "…" + texto.slice(ini, ini + tam) + (ini + tam < texto.length ? "…" : "");
+}
 const brl = v => v == null ? "—" : v.toLocaleString("pt-BR", {style:"currency", currency:"BRL"});
 const brlShort = v => v >= 1e9 ? "R$ " + (v/1e9).toLocaleString("pt-BR",{maximumFractionDigits:2}) + " bi"
   : v >= 1e6 ? "R$ " + (v/1e6).toLocaleString("pt-BR",{maximumFractionDigits:1}) + " mi"
@@ -343,6 +381,16 @@ async function load() {
   PN = window.__CTX_PNCP__ || await getJSON("data/pncp.json", PN);
   MIN = window.__CTX_MIN__ || await getJSON("data/minutas.json", MIN);
   ITX = window.__CTX_ITX__ || await getJSON("data/itens.json", ITX);
+  // índice de itens para a pesquisa (carregado em segundo plano; não atrasa a abertura do site)
+  Promise.resolve(window.__CTX_BUSCA__ || getJSON("data/busca_itens.json", null)).then(b => {
+    if (!b || !b.c) return;
+    for (const r of [...DB.vigentes, ...DB.encerrados]) {
+      const l = b.c[r.n]; if (!l) continue;
+      r.its = l; r.itsF = l.map(fold); r.itx = r.itsF.join(" | ");
+    }
+    BUSCA_OK = true;
+    if ((state.vig && state.vig.q) || (state.enc && state.enc.q)) render();
+  });
   if (MIN.pasta_raiz) $("#lnkMinutas").href = DRIVE_FOLDER(MIN.pasta_raiz);
   if (!DB) { $("#app").innerHTML = '<div class="empty">Não foi possível carregar data/contratos.json.</div>'; return; }
   UN = DB.unidades || {};
@@ -403,7 +451,7 @@ function filtered(tab) {
     (tab !== "vig" || !f.pncp || r.ps === f.pncp) &&
     (!f.min || (f.min === "sim") === (r.docs.length > 0)) &&
     (tab !== "enc" || !f.sit || r.sit === f.sit) &&
-    terms.every(t => r.idx.includes(t)));
+    casaBusca(r, terms));
   const k = f.sort, dir = f.dir;
   out.sort((a, b) => {
     let x = a[k], y = b[k];
@@ -447,6 +495,7 @@ function renderList(tab) {
   if (f.page >= pages) f.page = pages - 1;
   const slice = rows.slice(f.page * PAGE, f.page * PAGE + PAGE);
   const total = rows.reduce((s, r) => s + (r.v || 0), 0);
+  const qterms = fold(f.q).split(/\s+/).filter(Boolean);
 
   let head = "";
   if (tab === "vig") {
@@ -473,7 +522,7 @@ function renderList(tab) {
     <div class="filters">
       <div class="f search"><label for="q">Pesquisar</label>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Nº, credor, objeto, modalidade…" value="${esc(f.q)}" autocomplete="off"></div>
+        <input id="q" type="search" placeholder="Nº, credor, objeto, modalidade ou item…" value="${esc(f.q)}" autocomplete="off"></div>
       <div class="f"><label for="fUn">Unidade</label><select id="fUn"><option value="">Todas</option>${opts(Object.keys(UN), f.un, k => k + " · " + UN[k])}</select></div>
       <div class="f"><label for="fSec">Secretaria</label><select id="fSec"><option value="">Todas</option>${opts(secs, f.sec, v => v.charAt(0) + v.slice(1).toLowerCase())}</select></div>
       ${tab === "vig"
@@ -485,7 +534,7 @@ function renderList(tab) {
       <div class="f"><label for="fAno">Ano do contrato</label><select id="fAno"><option value="">Todos</option>${opts(anos, f.ano)}</select></div>
       <div class="f btns"><button class="btn" id="clear" type="button">Limpar</button><button class="btn primary" id="csv" type="button">Exportar CSV</button></div>
     </div>
-    <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> contrato(s) · <b class="num">${brl(total)}</b> · <kbd>/</kbd> pesquisar · <kbd>Esc</kbd> limpar</div>
+    <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> contrato(s) · <b class="num">${brl(total)}</b> · <kbd>/</kbd> pesquisar · <kbd>Esc</kbd> limpar${f.q ? (BUSCA_OK ? ` · pesquisa inclui os itens de <b class="num">${all.filter(r => r.its).length.toLocaleString("pt-BR")}</b> contratos` : " · carregando itens para a pesquisa…") : ""}</div>
   </section>`;
 
   const th = (k, lb, cls = "") => `<th class="${cls}${f.sort === k ? " sorted" : ""}" data-sort="${k}">${lb}<span class="ar">${f.sort === k ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th>`;
@@ -496,7 +545,9 @@ function renderList(tab) {
     </tr></thead>
     <tbody>${slice.length ? slice.map(r => `<tr data-open="${esc(r.n)}" tabindex="0">
       <td><div class="t1 num">${esc(r.n)}${r.docs.length ? `<span class="mini-doc" title="Minuta disponível no Drive"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>` : ""}</div><div class="t2">${esc(r.mod || "sem modalidade")}</div></td>
-      <td class="cr"><div class="t1 clip">${esc(r.cr)}</div><div class="t2 ob clip">${esc(r.obj)}</div></td>
+      <td class="cr"><div class="t1 clip">${esc(r.cr)}</div><div class="t2 ob clip">${esc(r.obj)}</div>${(() => {
+        const ach = itensAchados(r, qterms); if (!ach.length) return "";
+        return `<div class="hit">Item: ${marca(trecho(ach[0], qterms), qterms)}${ach.length > 1 ? ` <span class="muted">(+${ach.length - 1})</span>` : ""}</div>`; })()}</td>
       <td class="hide-sm"><div>${esc(cap(r.sec) || "—")}</div>${UN[r.un] && fold(UN[r.un]) !== fold(r.sec) ? `<div class="t2">${esc(UN[r.un])}</div>` : ""}</td>
       <td class="r num">${brl(r.v)}</td>
       <td class="num">${fmtD(r.fe)}${r.adt ? '<div class="t2">com aditivo</div>' : ""}</td>
@@ -746,7 +797,9 @@ async function carregarItens(r) {
   ITENS_CACHE[n] = itens;
   const total = itens.reduce((s, x) => s + (x.total || 0), 0);
   const LIM = 12, muitos = itens.length > LIM;
-  const linha = (x, i) => `<tr${muitos && i >= LIM ? ' class="mais" hidden' : ""}><td class="num muted">${i + 1}</td><td><div class="clip" title="${esc(x.prod)}">${esc(x.prod)}</div>${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
+  const qt = buscaAtual().filter(t => !r.idx.includes(t));
+  const bate = x => qt.length && qt.some(t => fold(x.prod).includes(t));
+  const linha = (x, i) => `<tr class="${muitos && i >= LIM && !bate(x) ? "mais" : ""}${bate(x) ? " item-hit" : ""}"${muitos && i >= LIM && !bate(x) ? " hidden" : ""}><td class="num muted">${i + 1}</td><td><div class="clip" title="${esc(x.prod)}">${qt.length ? marca(x.prod, qt) : esc(x.prod)}</div>${x.lote && x.lote !== "S/L" ? `<div class="t2">Lote ${esc(x.lote)}</div>` : ""}</td>
     <td class="muted">${esc(x.un || "")}</td><td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
   const srp = r.kbf && r.kbf.srp;
   const doPdf = r.kbf && r.kbf.fonte_itens === "PDF do contrato";
@@ -759,6 +812,8 @@ async function carregarItens(r) {
     ${r.v && Math.abs(total - r.v) > Math.max(1, r.v * 0.01) ? `<div class="muted" style="margin-top:6px">A soma dos itens (${brl(total)}) difere do valor da planilha (${brl(r.v)}).</div>` : ""}`;
   const b = $("#maisItens"); if (b) b.onclick = () => { box.querySelectorAll("tr.mais").forEach(t => t.hidden = false); b.remove(); };
 }
+
+const buscaAtual = () => fold((state[state.tab] && state[state.tab].q) || "").split(/\s+/).filter(Boolean);
 
 /* ---------- itens de cada aditivo (lidos do PDF do termo no PNCP) ---------- */
 const nTermo = h => { const m = String(h.n || "").match(/^\s*(\d{1,2})\s*[ºo°]?\s*(?:TA|termo)/i); return m ? +m[1] : null; };
@@ -785,7 +840,8 @@ function adtItensHtml(r, h) {
     <div class="tbl-wrap"><table class="mini"><thead><tr><th>Produto / serviço</th><th>Un.</th>${temQ0 ? '<th class="r">Qtd. contrato</th>' : ""}<th class="r">Qtd.${acr ? " acrescida" : sup ? " suprimida" : ""}</th>${temQ0 ? '<th class="r" title="Valor acrescido/suprimido sobre o valor original do item no contrato">% do item</th>' : ""}${temU0 ? '<th class="r">Preço no contrato</th>' : ""}<th class="r">Preço unit.${temU0 ? " novo" : ""}</th>${temU0 ? '<th class="r">Variação</th>' : ""}<th class="r">Total</th></tr></thead>
     <tbody>${its.map(x => { const pc = x.q0 && x.u0 ? x.total / (x.q0 * x.u0) * 100 : x.q0 ? x.qtd / x.q0 * 100 : null;  // % sobre o valor do item no contrato const alerta = acr && pc > 25.005;
       const vu = x.u0 ? (x.unit - x.u0) / x.u0 * 100 : null;
-      return `<tr><td><div class="clip" title="${esc(x.prod)}">${esc(x.prod)}</div></td><td class="muted">${esc(x.un || "")}</td>
+      const qt = buscaAtual().filter(t => !r.idx.includes(t)), hit = qt.length && qt.some(t => fold(x.prod).includes(t));
+      return `<tr${hit ? ' class="item-hit"' : ""}><td><div class="clip" title="${esc(x.prod)}">${hit ? marca(x.prod, qt) : esc(x.prod)}</div></td><td class="muted">${esc(x.un || "")}</td>
       ${temQ0 ? `<td class="r num muted">${qtdFmt(x.q0)}</td>` : ""}<td class="r num">${acr || sup ? `<b>${sup ? "−" : "+"}${qtdFmt(x.qtd)}</b>` : qtdFmt(x.qtd)}</td>
       ${temQ0 ? `<td class="r num${alerta ? " pct-alerta" : ""}"${alerta ? ' title="Acima de 25% do valor original do item (art. 125 da Lei 14.133/21) — confira se há justificativa."' : ""}>${pc == null ? "—" : pc.toLocaleString("pt-BR", {maximumFractionDigits: 1}) + "%"}</td>` : ""}
       ${temU0 ? `<td class="r num muted">${x.u0 ? brl(x.u0) : "—"}</td>` : ""}<td class="r num">${temU0 ? `<b>${brl(x.unit)}</b>` : brl(x.unit)}</td>

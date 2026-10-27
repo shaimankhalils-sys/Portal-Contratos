@@ -52,7 +52,7 @@ a{color:var(--ink)}
 .hcard{background:#fff;color:#1f2937;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .hcard-in{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:center;justify-content:space-between;padding:20px 28px}
 .brand{display:flex;gap:18px;align-items:center;min-width:0}
-.logo{height:58px;width:auto;flex:none;display:block}
+.logo{height:64px;width:auto;max-width:100%;flex:none;display:block}
 .brand-sep{width:1px;height:54px;background:#9ca3af}
 .org{font-size:15px;line-height:1.2;color:#4b5563;letter-spacing:.2px;text-transform:uppercase}
 .org b{display:block;font-weight:700;color:#374151}
@@ -249,7 +249,8 @@ tr.adt-sub>td{padding:0 10px 12px;background:var(--surface-2)}
   .top{padding:12px 12px 0}
   .hcard-in{padding:16px 18px;flex-direction:column;align-items:flex-start}
   .brand{gap:12px}
-  .logo{height:44px}
+  .logo{height:auto;width:100%;max-width:300px}
+  .brand{width:100%}
   .brand-sep{height:40px}
   .org{font-size:12.5px}
   .htitle{text-align:left}
@@ -273,9 +274,7 @@ tr.adt-sub>td{padding:0 10px 12px;background:var(--surface-2)}
   <div class="hcard">
     <div class="hcard-in">
       <div class="brand">
-        <img class="logo" src="assets/logo.png" alt="Prefeitura de Teixeira de Freitas">
-        <div class="brand-sep" aria-hidden="true"></div>
-        <div class="org">Secretaria de<b>Administração</b></div>
+        <img class="logo" src="assets/logo-completo.png" alt="Prefeitura de Teixeira de Freitas — Investindo no presente, transformando o futuro!">
       </div>
       <div class="htitle">
         <div class="eyebrow">Departamento Municipal de Contratos</div>

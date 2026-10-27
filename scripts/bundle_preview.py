@@ -17,6 +17,7 @@ def uri(name):
 
 
 html = html.replace('src="assets/logo.png"', f'src="{uri("logo.png")}"')
+html = html.replace('src="assets/logo-completo.png"', f'src="{uri("logo-completo.png")}"')
 mn_path = os.path.join(root, "data", "minutas.json")
 minutas = rd("data", "minutas.json") if os.path.exists(mn_path) else '{"docs":{}}'
 inject = ("<script>window.__CTX_DATA__=" + data.replace("</", "<\\/") + ";"

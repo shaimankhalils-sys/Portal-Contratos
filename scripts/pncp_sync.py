@@ -104,6 +104,7 @@ def main(src, dest):
     pncp = baixar_pncp()
 
     por_chave, por_seq, aditivos = {}, {}, {}
+    alternativos = {}  # (un, seq, ano da assinatura) -> contratos cujo "ano do contrato" no PNCP é outro
     for c in pncp:
         k = chave_numero(c)
         if not k:
@@ -114,6 +115,9 @@ def main(src, dest):
         else:
             por_chave.setdefault((un, seq, ano), []).append(c)
             por_seq.setdefault((seq, ano), []).append(c)
+            ano_ass = int((c.get("dataAssinatura") or "0000")[:4] or 0)
+            if ano_ass and ano_ass != ano:
+                alternativos.setdefault((un, seq, ano_ass), []).append(c)
 
     # o ano do termo aditivo no PNCP pode ser o ano do aditivo, não o do contrato:
     # cada aditivo vai para o contrato de mesma unidade/sequencial com o maior ano <= ano do aditivo
@@ -134,6 +138,10 @@ def main(src, dest):
         if not r.get("seq"):
             continue
         cands = por_chave.get((r["un"], r["seq"], r["ano"])) or por_seq.get((r["seq"], r["ano"]), [])
+        ano_errado = False
+        if not cands and alternativos.get((r["un"], r["seq"], r["ano"])):
+            # lançado no PNCP com outro "ano do contrato" (ex.: 2027 em vez de 2026): casa pelo ano da assinatura
+            cands, ano_errado = alternativos[(r["un"], r["seq"], r["ano"])], True
         tas = tas_por_contrato.get((r["un"], r["seq"], r["ano"]), [])
         for c in tas:
             usados.add(c.get("numeroControlePNCP"))
@@ -141,6 +149,8 @@ def main(src, dest):
             fortes = [c for c in cands if re.sub(r"\D", "", c.get("niFornecedor") or "") == r["doc"]]
         else:
             fortes = [c for c in cands if parecido(c.get("nomeRazaoSocialFornecedor"), r["cr"])]
+        if ano_errado and not fortes:  # com o ano trocado, só aceita se o credor conferir
+            cands = []
         escolhido = (fortes or cands or [None])[0]
         if not escolhido:
             resultado[r["n"]] = {"st": "ausente"}
@@ -155,6 +165,8 @@ def main(src, dest):
             obs.append("valor diferente")
         if not fortes:
             obs.append("credor não confere")
+        if ano_errado:
+            obs.append(f"ano do contrato lançado como {escolhido.get('anoContrato')} no PNCP")
         resultado[r["n"]] = {
             "st": "divergente" if obs else "ok",
             "obs": ", ".join(obs),

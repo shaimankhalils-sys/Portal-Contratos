@@ -838,7 +838,7 @@ function adtItensHtml(r, h) {
   return `<tr class="adt-sub"><td colspan="6"><details class="adt-itens" open>
     <summary><span>${titulo} · ${its.length} item(ns) · <span class="num">${brl(soma)}</span></span><span>${links}</span></summary>
     <div class="tbl-wrap"><table class="mini"><thead><tr><th>Produto / serviço</th><th>Un.</th>${temQ0 ? '<th class="r">Qtd. contrato</th>' : ""}<th class="r">Qtd.${acr ? " acrescida" : sup ? " suprimida" : ""}</th>${temQ0 ? '<th class="r" title="Valor acrescido/suprimido sobre o valor original do item no contrato">% do item</th>' : ""}${temU0 ? '<th class="r">Preço no contrato</th>' : ""}<th class="r">Preço unit.${temU0 ? " novo" : ""}</th>${temU0 ? '<th class="r">Variação</th>' : ""}<th class="r">Total</th></tr></thead>
-    <tbody>${its.map(x => { const pc = x.q0 && x.u0 ? x.total / (x.q0 * x.u0) * 100 : x.q0 ? x.qtd / x.q0 * 100 : null;  // % sobre o valor do item no contrato const alerta = acr && pc > 25.005;
+    <tbody>${its.map(x => { const pc = x.q0 && x.u0 ? x.total / (x.q0 * x.u0) * 100 : x.q0 ? x.qtd / x.q0 * 100 : null; /* % sobre o valor do item no contrato */ const alerta = acr && pc > 25.005;
       const vu = x.u0 ? (x.unit - x.u0) / x.u0 * 100 : null;
       const qt = buscaAtual().filter(t => !r.idx.includes(t)), hit = qt.length && qt.some(t => fold(x.prod).includes(t));
       return `<tr${hit ? ' class="item-hit"' : ""}><td><div class="clip" title="${esc(x.prod)}">${hit ? marca(x.prod, qt) : esc(x.prod)}</div></td><td class="muted">${esc(x.un || "")}</td>

@@ -1,2 +1,36 @@
-[21:28:57] Contratos vigentes no PNCP a ler agora: 0
-[21:28:57] Lidos agora: 0 | erros: 0 | sem contratação vinculada: 0 | contratos com itens: 861 de 872 | termos aditivos: 442
+[09:40:13] Contratos vigentes no PNCP a ler agora: 871
+[09:40:35]   25/871 contratos
+[09:40:54]   50/871 contratos
+[09:41:11]   75/871 contratos
+[09:41:28]   100/871 contratos
+[09:41:45]   125/871 contratos
+[09:42:04]   150/871 contratos
+[09:42:28]   175/871 contratos
+[09:42:46]   200/871 contratos
+[09:43:20]   225/871 contratos
+[09:43:40]   250/871 contratos
+[09:44:03]   275/871 contratos
+[09:44:22]   300/871 contratos
+[09:44:41]   325/871 contratos
+[09:44:56]   350/871 contratos
+[09:45:10]   375/871 contratos
+[09:45:24]   400/871 contratos
+[09:45:40]   425/871 contratos
+[09:45:54]   450/871 contratos
+[09:46:13]   475/871 contratos
+[09:46:32]   500/871 contratos
+[09:46:48]   525/871 contratos
+[09:47:08]   550/871 contratos
+[09:47:23]   575/871 contratos
+[09:47:38]   600/871 contratos
+[09:47:54]   625/871 contratos
+[09:48:18]   650/871 contratos
+[09:48:38]   675/871 contratos
+[09:48:53]   700/871 contratos
+[09:49:34]   725/871 contratos
+[09:49:50]   750/871 contratos
+[09:50:11]   775/871 contratos
+[09:50:34]   800/871 contratos
+[09:51:44]   825/871 contratos
+[09:52:15]   850/871 contratos
+[09:52:32] Lidos agora: 871 | erros: 0 | sem contratação vinculada: 0 | contratos com itens: 711 de 872 | termos aditivos: 442

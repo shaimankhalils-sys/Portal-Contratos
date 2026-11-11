@@ -1,2 +1,2 @@
-[21:35:47] Contratos vigentes no PNCP a ler agora: 12
-[21:36:01] Lidos agora: 12 | erros: 0 | sem contratação vinculada: 0 | contratos com itens: 882 de 904 | termos aditivos: 468
+[09:56:06] Contratos vigentes no PNCP a ler agora: 13
+[09:56:15] Lidos agora: 13 | erros: 0 | sem contratação vinculada: 0 | contratos com itens: 881 de 904 | termos aditivos: 468

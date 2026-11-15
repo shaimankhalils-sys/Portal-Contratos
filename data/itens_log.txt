@@ -1,6 +1,6 @@
-[09:41:47] Contratos vigentes no PNCP a ler agora: 14
-[09:42:01]   erro em 4-755-2026 (compra 13650403000128-1-000425/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:42:01] Traceback (most recent call last):
+[15:37:29] Contratos vigentes no PNCP a ler agora: 14
+[15:37:44]   erro em 4-755-2026 (compra 13650403000128-1-000425/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:37:44] Traceback (most recent call last):
   File "/home/runner/work/Portal-Contratos/Portal-Contratos/scripts/pncp_itens.py", line 234, in main
     aditivos = ler_termos(cnpj_orgao, p["ano"], p["seq"])
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -29,8 +29,8 @@
     raise HTTPError(req.full_url, code, msg, hdrs, fp)
 urllib.error.HTTPError: HTTP Error 503: Service Unavailable
 
-[09:42:15]   erro em 3-745-2026 (compra 13650403000128-1-000314/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:42:15] Traceback (most recent call last):
+[15:37:58]   erro em 3-745-2026 (compra 13650403000128-1-000314/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:37:58] Traceback (most recent call last):
   File "/home/runner/work/Portal-Contratos/Portal-Contratos/scripts/pncp_itens.py", line 234, in main
     aditivos = ler_termos(cnpj_orgao, p["ano"], p["seq"])
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -59,16 +59,16 @@ urllib.error.HTTPError: HTTP Error 503: Service Unavailable
     raise HTTPError(req.full_url, code, msg, hdrs, fp)
 urllib.error.HTTPError: HTTP Error 503: Service Unavailable
 
-[09:42:29]   erro em 3-746-2026 (compra 13650403000128-1-000314/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:42:42]   erro em 3-748-2026 (compra 13650403000128-1-000314/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:42:56]   erro em 4-750-2026 (compra 13650403000128-1-000318/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:43:10]   erro em 2-762-2026 (compra 13650403000128-1-000445/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:43:23]   erro em 2-763-2026 (compra 13650403000128-1-000357/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:43:38]   erro em 2-767-2026 (compra 13650403000128-1-000036/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:43:52]   erro em 2-776-2026 (compra 13650403000128-1-000454/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:44:06]   erro em 4-782-2026 (compra 13650403000128-1-000310/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:44:20]   erro em 4-783-2026 (compra 13650403000128-1-000310/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:44:34]   erro em 2-793-2026 (compra 13650403000128-1-000268/2025): HTTPError: HTTP Error 503: Service Unavailable
-[09:44:48]   erro em 2-738-2026 (compra 13650403000128-1-000323/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:45:01]   erro em 2-739-2026 (compra 13650403000128-1-000324/2026): HTTPError: HTTP Error 503: Service Unavailable
-[09:45:01] Lidos agora: 0 | erros: 14 | sem contratação vinculada: 0 | contratos com itens: 888 de 904 | termos aditivos: 476
+[15:38:13]   erro em 3-746-2026 (compra 13650403000128-1-000314/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:38:27]   erro em 3-748-2026 (compra 13650403000128-1-000314/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:38:41]   erro em 4-750-2026 (compra 13650403000128-1-000318/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:38:55]   erro em 2-762-2026 (compra 13650403000128-1-000445/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:39:09]   erro em 2-763-2026 (compra 13650403000128-1-000357/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:39:23]   erro em 2-767-2026 (compra 13650403000128-1-000036/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:39:37]   erro em 2-776-2026 (compra 13650403000128-1-000454/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:39:52]   erro em 4-782-2026 (compra 13650403000128-1-000310/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:40:06]   erro em 4-783-2026 (compra 13650403000128-1-000310/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:40:20]   erro em 2-793-2026 (compra 13650403000128-1-000268/2025): HTTPError: HTTP Error 503: Service Unavailable
+[15:40:34]   erro em 2-738-2026 (compra 13650403000128-1-000323/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:40:48]   erro em 2-739-2026 (compra 13650403000128-1-000324/2026): HTTPError: HTTP Error 503: Service Unavailable
+[15:40:48] Lidos agora: 0 | erros: 14 | sem contratação vinculada: 0 | contratos com itens: 888 de 904 | termos aditivos: 476

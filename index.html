@@ -752,11 +752,17 @@ function pendencias() {
   const semMin = v.filter(r => !r.docs.length);
   const pncpProb = PN.verificado_em ? v.filter(r => r.ps === "ausente" || r.ps === "divergente") : [];
   const so = PN.so_pncp || [];
-  return {venc, semMod, semNum, semMin, pncpProb, so,
-    total: venc.length + semMod.length + semNum.length + pncpProb.length};
+  // conferência com o Portal da Transparência (sistema KBF)
+  const pt = r => r.kbf && r.kbf.portal;
+  const termosPncp = r => ((r.kbf && r.kbf.aditivos) || []).filter(a => !cancelado(a)).length;
+  const ptAdt = v.filter(r => pt(r) && r.exigePncp && r.p && pt(r).adt > termosPncp(r)).sort((a, b) => (pt(b).adt - termosPncp(b)) - (pt(a).adt - termosPncp(a)));
+  const ptResc = v.filter(r => pt(r) && /RESCIND/i.test(pt(r).sit));
+  const ptValor = v.filter(r => pt(r) && pt(r).v && r.v && Math.abs(pt(r).v - r.v) > Math.max(1, r.v * 0.01));
+  return {venc, semMod, semNum, semMin, pncpProb, so, ptAdt, ptResc, ptValor, termosPncp,
+    total: venc.length + semMod.length + semNum.length + pncpProb.length + ptAdt.length + ptResc.length + ptValor.length};
 }
 function renderPend(p) {
-  current = [...p.venc, ...p.semMod, ...p.semNum, ...p.pncpProb];
+  current = [...p.venc, ...p.semMod, ...p.semNum, ...p.pncpProb, ...p.ptAdt, ...p.ptResc, ...p.ptValor];
   const list = (rows, extra) => rows.length ? rows.map(r => `<div class="issue-row" data-open="${esc(r.n)}" tabindex="0">
       <div><div class="t1 num" style="font-weight:600">${esc(r.n)}</div><div class="t2 muted">${esc(r.cr)}</div></div>
       <div style="text-align:right">${extra(r)}</div></div>`).join("") : '<div class="note">Nada pendente aqui.</div>';
@@ -774,6 +780,12 @@ function renderPend(p) {
       ${box("Sem nº de modalidade", `${p.semMod.length} contrato(s)`, list(p.semMod, r => `<span class="muted">${esc(r.obj)}</span>`))}
       ${box("Número fora do padrão", "esperado U-NNN-AAAA, ex.: 2-1023-2025", list(p.semNum, r => `<span class="muted">${esc(r.obj)}</span>`))}
       ${soBox}
+      ${p.ptAdt.length ? box("Aditivos fora do PNCP", `${p.ptAdt.length} contrato(s) com mais termos no Portal da Transparência do que no PNCP`,
+          list(p.ptAdt, r => `<span class="num">Portal <b>${r.kbf.portal.adt}</b> · PNCP <b>${p.termosPncp(r)}</b></span><div class="t2 muted">faltam ${r.kbf.portal.adt - p.termosPncp(r)} termo(s) no PNCP</div>`)) : ""}
+      ${p.ptResc.length ? box("Rescindidos no Portal da Transparência", `${p.ptResc.length} contrato(s) vigentes na planilha`,
+          list(p.ptResc, r => `<span class="badge b-red">rescindido no portal</span><div class="t2 muted">planilha: vigente até ${fmtD(r.fe)}</div>`)) : ""}
+      ${p.ptValor.length ? box("Valor diferente do Portal da Transparência", `${p.ptValor.length} contrato(s) · valor original`,
+          list(p.ptValor, r => `<span class="num">planilha ${brl(r.v)}</span><div class="t2 num">portal ${brl(r.kbf.portal.v)}</div>`)) : ""}
       <section class="panel"><div class="panel-h"><h2>Minutas no Drive</h2><small>${(DB.vigentes.length - p.semMin.length).toLocaleString("pt-BR")} de ${DB.vigentes.length.toLocaleString("pt-BR")} contratos com minuta</small></div>
         <div class="note"><b class="num">${p.semMin.length.toLocaleString("pt-BR")}</b> de ${DB.vigentes.length.toLocaleString("pt-BR")} contratos vigentes ainda sem <b>minuta no Drive</b>.<br><br>
         ${(MIN.sem_contrato || []).length ? `<b class="num">${MIN.sem_contrato.length}</b> arquivo(s) no Drive com nome fora do padrão (não ligados a nenhum contrato):
@@ -802,7 +814,9 @@ async function carregarItens(r) {
     <td class="muted">${esc(x.un || "")}</td><td class="r num">${(x.qtd ?? "—").toLocaleString("pt-BR")}</td><td class="r num">${brl(x.unit)}</td><td class="r num">${brl(x.total)}</td></tr>`;
   const srp = r.kbf && r.kbf.srp;
   const doPdf = r.kbf && r.kbf.fonte_itens === "PDF do contrato";
-  box.innerHTML = `${doPdf ? `<div class="muted" style="margin-bottom:8px">Itens conforme o Anexo I do contrato publicado no PNCP${r.kbf.pdf ? ` · <a href="${esc(r.kbf.pdf)}" target="_blank" rel="noopener">abrir PDF ↗</a>` : ""}. Itens acrescidos ou suprimidos por aditivo aparecem na seção “Aditivos”.</div>`
+  const doPortal = r.kbf && r.kbf.fonte_itens === "Portal da Transparência";
+  box.innerHTML = `${doPortal ? `<div class="muted" style="margin-bottom:8px">Itens cadastrados no Portal da Transparência${r.kbf.portal && r.kbf.portal.lido ? `, lidos em ${fmtD(r.kbf.portal.lido)}` : ""}.${r.hist && r.hist.length ? " Itens acrescidos ou suprimidos por aditivo aparecem na seção “Aditivos”." : ""}</div>`
+    : doPdf ? `<div class="muted" style="margin-bottom:8px">Itens conforme o Anexo I do contrato publicado no PNCP${r.kbf.pdf ? ` · <a href="${esc(r.kbf.pdf)}" target="_blank" rel="noopener">abrir PDF ↗</a>` : ""}. Itens acrescidos ou suprimidos por aditivo aparecem na seção “Aditivos”.</div>`
     : r.kbf && r.kbf.fonte === "PNCP" ? `<div class="muted" style="margin-bottom:8px">Itens vencidos por este fornecedor na contratação de origem${r.kbf.compra_num ? ` (nº ${esc(r.kbf.compra_num)})` : ""}, segundo o PNCP.${srp ? " <b>Registro de preços:</b> a quantidade é a homologada na ata e pode ser maior que a deste contrato." : ""}</div>` : ""}
     <div class="tbl-wrap"><table class="mini"><thead><tr><th>#</th><th>Produto / serviço</th><th>Un.</th><th class="r">Qtd.</th><th class="r">Preço unit.</th><th class="r">Total</th></tr></thead>
     <tbody>${itens.map(linha).join("")}</tbody>
@@ -911,6 +925,7 @@ function openFicha(n) {
         <div><div class="l">Unidade</div><div class="v">${esc(r.un ? r.un + " · " + (UN[r.un] || "") : "—")}</div></div>
         <div><div class="l">Cidade do credor</div><div class="v">${esc(r.cid || "—")}</div></div>
         <div><div class="l">Situação</div><div class="v">${esc(cap(r.sit))}${r.aba ? ` <span class="muted">(${esc(r.aba)})</span>` : ""}</div></div>
+        ${r.kbf && r.kbf.portal ? `<div><div class="l">No Portal da Transparência</div><div class="v"><span class="num">${r.kbf.portal.adt}</span> aditivo(s) · ${esc(cap(r.kbf.portal.sit) || "—")}</div></div>` : ""}
       </div></div>
       <div class="sec"><h4>Minutas e documentos</h4>
         ${r.docs.length ? `<ul class="docs">${r.docs.map(d => `<li>

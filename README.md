@@ -27,6 +27,7 @@ Planilha no Google Drive ──► rotina automática (GitHub Actions) ──►
 | `scripts/pncp_sync.py` | Consulta o PNCP e gera `pncp.json` |
 | `scripts/pncp_itens.py` | Itens (da contratação de origem) e termos aditivos de cada contrato → `data/itens.json`, `data/itens/` |
 | `scripts/pncp_anexos.py` | Lê o "ANEXO I – ITENS" dos PDFs do contrato e de cada termo aditivo no PNCP (itens acrescidos/suprimidos). Os PDFs não ficam no repositório; só os itens lidos (`data/pncp_anexos/`). Relatório em `data/anexos_log.txt` |
+| `scripts/portal_import.py` | Itens e nº de aditivos do Portal da Transparência, a partir da exportação mantida por Sergio Carneiro (github.com/sergiocarneiro-adm/contratostx). Prioridade sobre os itens do PNCP; vale também para encerrados. Resumo em `data/portal.json` |
 | `scripts/anexo_itens.py` | Leitor da tabela de itens (usado por `pncp_anexos.py`) |
 | `.github/workflows/atualizar-dados.yml` | A rotina automática |
 

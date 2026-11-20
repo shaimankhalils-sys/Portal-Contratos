@@ -319,6 +319,18 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const fold = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 let BUSCA_OK = false;
 // pesquisa: cada palavra pode estar nos dados do contrato (nº, credor, objeto…) ou nos itens
+// relevância de um resultado: nº > credor > objeto/modalidade > itens (início de palavra vale mais)
+function relevancia(r, terms) {
+  const ini = (txt, t) => txt.startsWith(t) || txt.includes(" " + t) || txt.includes("-" + t);
+  let s = 0;
+  for (const t of terms) {
+    if (r.fN.includes(t)) s += r.fN.startsWith(t) ? 100 : 80;
+    else if (r.fCr.includes(t)) s += ini(r.fCr, t) ? 60 : 40;
+    else if (r.fObj.includes(t)) s += ini(r.fObj, t) ? 12 : 8;
+    else s += 1;
+  }
+  return s;
+}
 // as palavras que não estão nos dados do contrato precisam estar todas no MESMO item
 function casaBusca(r, terms) {
   const resto = terms.filter(t => !r.idx.includes(t));
@@ -414,6 +426,7 @@ function prep(r, vig) {
   r.kbf = (ITX.contratos && ITX.contratos[r.n]) || null;
   r.hist = historico(r);
   r.idx = fold([r.n, r.cr, r.obj, r.mod, r.sec, r.cid].join(" "));
+  r.fN = fold(r.n); r.fCr = fold(r.cr); r.fObj = fold([r.obj, r.mod, r.sec, r.cid].join(" "));
 }
 
 /* ---------- helpers de status ---------- */
@@ -452,7 +465,11 @@ function filtered(tab) {
     (tab !== "enc" || !f.sit || r.sit === f.sit) &&
     casaBusca(r, terms));
   const k = f.sort, dir = f.dir;
+  // com pesquisa: primeiro o que bate no nº e no credor, depois objeto/modalidade, por último só nos itens
+  const porRel = terms.length && !f.ordemManual;
+  if (porRel) out.forEach(r => r._rel = relevancia(r, terms));
   out.sort((a, b) => {
+    if (porRel && a._rel !== b._rel) return b._rel - a._rel;
     let x = a[k], y = b[k];
     if (x == null || x === "") return 1;
     if (y == null || y === "") return -1;
@@ -533,7 +550,7 @@ function renderList(tab) {
       <div class="f"><label for="fAno">Ano do contrato</label><select id="fAno"><option value="">Todos</option>${opts(anos, f.ano)}</select></div>
       <div class="f btns"><button class="btn" id="clear" type="button">Limpar</button><button class="btn primary" id="csv" type="button">Exportar CSV</button></div>
     </div>
-    <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> contrato(s) · <b class="num">${brl(total)}</b> · <kbd>/</kbd> pesquisar · <kbd>Esc</kbd> limpar${f.q ? (BUSCA_OK ? ` · pesquisa inclui os itens de <b class="num">${all.filter(r => r.its).length.toLocaleString("pt-BR")}</b> contratos` : " · carregando itens para a pesquisa…") : ""}</div>
+    <div class="hint"><b class="num">${rows.length.toLocaleString("pt-BR")}</b> contrato(s) · <b class="num">${brl(total)}</b> · <kbd>/</kbd> pesquisar · <kbd>Esc</kbd> limpar${f.q && !f.ordemManual ? " · ordenado por relevância (clique numa coluna para reordenar)" : ""}${f.q ? (BUSCA_OK ? ` · pesquisa inclui os itens de <b class="num">${all.filter(r => r.its).length.toLocaleString("pt-BR")}</b> contratos` : " · carregando itens para a pesquisa…") : ""}</div>
   </section>`;
 
   const th = (k, lb, cls = "") => `<th class="${cls}${f.sort === k ? " sorted" : ""}" data-sort="${k}">${lb}<span class="ar">${f.sort === k ? (f.dir > 0 ? "▲" : "▼") : "↕"}</span></th>`;
@@ -566,7 +583,7 @@ function bindList(tab) {
   const f = state[tab];
   const q = $("#q");
   let t;
-  q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = q.value; f.page = 0; const pos = q.selectionStart; render(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); }, 160); });
+  q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { f.q = q.value; f.page = 0; f.ordemManual = false; const pos = q.selectionStart; render(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); }, 160); });
   const sel = (id, key) => { const el = $(id); if (el) el.addEventListener("change", () => { f[key] = el.value; f.page = 0; render(); }); };
   sel("#fUn","un"); sel("#fSec","sec"); sel("#fVenc","venc"); sel("#fPncp","pncp"); sel("#fSit","sit"); sel("#fAno","ano"); sel("#fMin","min");
   $("#clear").onclick = () => { Object.assign(f, {q:"",un:"",sec:"",venc:"",pncp:"",min:"",sit:"",ano:"",page:0}); render(); };
@@ -574,7 +591,7 @@ function bindList(tab) {
   $("#prev").onclick = () => { f.page--; render(); scrollTo({top: $("table").getBoundingClientRect().top + scrollY - 80}); };
   $("#next").onclick = () => { f.page++; render(); scrollTo({top: $("table").getBoundingClientRect().top + scrollY - 80}); };
   document.querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => {
-    const k = th.dataset.sort; if (f.sort === k) f.dir *= -1; else { f.sort = k; f.dir = (k === "v") ? -1 : 1; } render(); });
+    const k = th.dataset.sort; if (f.sort === k && f.ordemManual !== false) f.dir *= -1; else if (f.sort !== k) { f.sort = k; f.dir = (k === "v") ? -1 : 1; } f.ordemManual = true; render(); });
   document.querySelectorAll(".kpi[data-venc]").forEach(b => b.onclick = () => { f.venc = f.venc === b.dataset.venc ? "" : b.dataset.venc; f.page = 0; render(); });
   bindOpen();
 }
